@@ -1,6 +1,6 @@
 // app/page.tsx
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 type ErrorCode =
   | "E01"
@@ -15,10 +15,8 @@ type ErrorCode =
   | "E10"
   | "E11"
   | "E12"
-  | "E13";
-//   | "running"
-//   | "machine_off"
-//   | "time_remaining";
+  | "E13"
+  | "E14";
 
 type MachineData = {
   id: string;
@@ -45,16 +43,38 @@ const errorCodes: Record<string, { message: string; color: string }> = {
   E11: { message: "Báo động maoci", color: "#a855f7" },
   E12: { message: "Cửa mở", color: "#a855f7" },
   E13: { message: "Đang dừng khẩn cấp", color: "#a855f7" },
-  //   machine_off: { message: "Máy tắt", color: "#6b7280" },
-  //   time_remaining: { message: "Thời gian còn lại", color: "#ffffff" },
-  //   running: { message: "Đang chạy", color: "#22c55e" },
+  E14: { message: "Đạt chiều dài", color: "#a855f7" },
 };
 
 export default function Home() {
   const [currentPage, setCurrentPage] = useState(1);
+  const [autoScroll, setAutoScroll] = useState(false);
+  const [scrollInterval, setScrollInterval] = useState(5);
   const machinesPerPage = 10;
   const totalMachines = 200;
   const totalPages = Math.ceil(totalMachines / machinesPerPage);
+
+  // Xử lý tự động chuyển trang
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+
+    if (autoScroll) {
+      timer = setInterval(() => {
+        setCurrentPage((current) => {
+          if (current >= totalPages) {
+            return 1;
+          }
+          return current + 1;
+        });
+      }, scrollInterval * 1000);
+    }
+
+    return () => {
+      if (timer) {
+        clearInterval(timer);
+      }
+    };
+  }, [autoScroll, scrollInterval, totalPages]);
 
   const generateMachineData = (id: number): MachineData => {
     const statuses = Object.keys(errorCodes) as ErrorCode[];
@@ -135,7 +155,7 @@ export default function Home() {
       <div className="bg-gray-800 p-4 rounded-lg">
         <h2 className="text-center text-2xl font-bold">{machine.id}</h2>
 
-        <div className="relative w-48 h-48 mx-auto ">
+        <div className="relative w-48 h-48 mx-auto">
           <svg className="w-full h-full transform -rotate-90">
             <circle
               cx="100"
@@ -156,9 +176,6 @@ export default function Home() {
               style={{ stroke: getStatusColor(machine.status) }}
             />
           </svg>
-          {/* <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-2xl font-bold">
-            {machine.efficiency}%
-          </div> */}
           <div className="absolute inset-0 flex items-center justify-center text-2xl font-bold">
             {machine.efficiency}%
           </div>
@@ -200,7 +217,6 @@ export default function Home() {
 
     const handlePageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const value = e.target.value;
-      // Kiểm tra giá trị nhập vào có phải là số và trong phạm vi hợp lệ
       if (/^\d*$/.test(value)) {
         setPageInput(value);
       }
@@ -211,64 +227,95 @@ export default function Home() {
       if (newPage >= 1 && newPage <= totalPages) {
         setCurrentPage(newPage);
       } else {
-        setPageInput(currentPage.toString()); // Reset nếu số trang không hợp lệ
+        setPageInput(currentPage.toString());
       }
     };
 
-    return (
-      <div className="flex items-center gap-4">
-        <button
-          onClick={() => setCurrentPage(currentPage - 1)}
-          disabled={currentPage === 1}
-          className="p-2 bg-gray-700 rounded disabled:opacity-50"
-        >
-          <svg
-            className="w-5 h-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M15 19l-7-7 7-7"
-            />
-          </svg>
-        </button>
+    useEffect(() => {
+      setPageInput(currentPage.toString());
+    }, [currentPage]);
 
-        <div className="flex items-center gap-2">
-          <span>Trang</span>
-          <input
-            type="text"
-            value={pageInput}
-            onChange={handlePageChange}
-            onBlur={handlePageSubmit}
-            onKeyDown={(e) => e.key === "Enter" && handlePageSubmit()}
-            className="w-12 p-1 text-center bg-gray-800 text-white border rounded"
-          />
-          <span>/{totalPages}</span>
+    return (
+      <div className="flex items-center gap-8">
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={autoScroll}
+              onChange={(e) => setAutoScroll(e.target.checked)}
+              className="w-4 h-4"
+            />
+            <span>Tự động chuyển trang</span>
+          </label>
+
+          <div className="flex items-center gap-2">
+            <span>Thời gian:</span>
+            <input
+              type="number"
+              min="1"
+              max="60"
+              value={scrollInterval}
+              onChange={(e) => setScrollInterval(Number(e.target.value))}
+              className="w-16 p-1 text-center bg-gray-800 text-white border rounded"
+            />
+            <span>giây</span>
+          </div>
         </div>
 
-        <button
-          onClick={() => setCurrentPage(currentPage + 1)}
-          disabled={currentPage === totalPages}
-          className="p-2 bg-gray-700 rounded disabled:opacity-50"
-        >
-          <svg
-            className="w-5 h-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+        <div className="flex items-center gap-4 border-l border-gray-700 pl-8">
+          <button
+            onClick={() => setCurrentPage(currentPage - 1)}
+            disabled={currentPage === 1}
+            className="p-2 bg-gray-700 rounded disabled:opacity-50"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9 5l7 7-7 7"
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 19l-7-7 7-7"
+              />
+            </svg>
+          </button>
+
+          <div className="flex items-center gap-2">
+            <span>Trang</span>
+            <input
+              type="text"
+              value={pageInput}
+              onChange={handlePageChange}
+              onBlur={handlePageSubmit}
+              onKeyDown={(e) => e.key === "Enter" && handlePageSubmit()}
+              className="w-12 p-1 text-center bg-gray-800 text-white border rounded"
             />
-          </svg>
-        </button>
+            <span>/{totalPages}</span>
+          </div>
+
+          <button
+            onClick={() => setCurrentPage(currentPage + 1)}
+            disabled={currentPage === totalPages}
+            className="p-2 bg-gray-700 rounded disabled:opacity-50"
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 5l7 7-7 7"
+              />
+            </svg>
+          </button>
+        </div>
       </div>
     );
   };
