@@ -1,6 +1,9 @@
 // app/page.tsx
 "use client";
+import React from "react";
+
 import { useState, useEffect } from "react";
+import * as echarts from "echarts";
 
 type ErrorCode =
   | "E01"
@@ -151,34 +154,82 @@ export default function Home() {
   };
 
   const MachineCard = ({ machine }: { machine: MachineData }) => {
+    const chartRef = React.useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+      if (chartRef.current) {
+        const chart = echarts.init(chartRef.current);
+
+        const option = {
+          tooltip: {
+            trigger: "item",
+            formatter: "{b}: {c} ({d}%)", // Hiển thị tên, giá trị và phần trăm khi hover
+          },
+          legend: {
+            show: false, // Ẩn chú thích
+          },
+          series: [
+            {
+              name: "Hiệu suất",
+              type: "pie",
+              radius: ["40%", "70%"],
+              avoidLabelOverlap: false,
+              label: {
+                show: false, // Ẩn nhãn trên từng phần
+              },
+              labelLine: {
+                show: false,
+              },
+              data: [
+                {
+                  value: machine.efficiency,
+                  name: "Hiệu suất",
+                  itemStyle: { color: getStatusColor(machine.status) },
+                },
+                {
+                  value: 100 - machine.efficiency,
+                  name: "Còn lại",
+                  itemStyle: { color: "#374151" }, // Màu xám đậm
+                },
+              ],
+            },
+          ],
+          graphic: {
+            type: "text",
+            left: "center",
+            top: "center",
+            style: {
+              text: `${machine.efficiency}%`, // Hiển thị hiệu suất ở giữa
+              textAlign: "center",
+              fill: "#fff", // Màu chữ trắng
+              fontSize: 20,
+              fontWeight: "bold",
+            },
+          },
+        };
+
+        chart.setOption(option);
+
+        // Resize chart khi kích thước cửa sổ thay đổi
+        window.addEventListener("resize", () => {
+          chart.resize();
+        });
+
+        return () => {
+          chart.dispose();
+          window.removeEventListener("resize", () => {
+            chart.resize();
+          });
+        };
+      }
+    }, [machine]);
+
     return (
       <div className="bg-gray-800 p-4 rounded-lg">
         <h2 className="text-center text-2xl font-bold">{machine.id}</h2>
 
-        <div className="relative w-48 h-48 mx-auto">
-          <svg className="w-full h-full transform -rotate-90">
-            <circle
-              cx="100"
-              cy="95"
-              r="72"
-              className="stroke-current text-gray-700"
-              strokeWidth="12"
-              fill="none"
-            />
-            <circle
-              cx="100"
-              cy="95"
-              r="72"
-              strokeWidth="12"
-              fill="none"
-              strokeDasharray="452.39"
-              strokeDashoffset={452.39 * (1 - machine.efficiency / 100)}
-              style={{ stroke: getStatusColor(machine.status) }}
-            />
-          </svg>
-          <div className="absolute inset-0 flex items-center justify-center text-2xl font-bold">
-            {machine.efficiency}%
-          </div>
+        <div className="w-48 h-48 mx-auto relative">
+          <div ref={chartRef} className="w-full h-full"></div>
         </div>
 
         <div className="space-y-1 text-xl">
