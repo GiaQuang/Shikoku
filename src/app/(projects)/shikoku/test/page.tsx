@@ -23,7 +23,6 @@ type ErrorCode =
 
 type MachineData = {
   id: string;
-  efficiency: number;
   targetMeters: number;
   actualMeters: number;
   targetRpm: number;
@@ -53,7 +52,7 @@ export default function Home() {
   const [currentPage, setCurrentPage] = useState(1);
   const [autoScroll, setAutoScroll] = useState(false);
   const [scrollInterval, setScrollInterval] = useState(5);
-  const machinesPerPage = 10;
+  const machinesPerPage = 25;
   const totalMachines = 200;
   const totalPages = Math.ceil(totalMachines / machinesPerPage);
 
@@ -82,13 +81,15 @@ export default function Home() {
   const generateMachineData = (id: number): MachineData => {
     const statuses = Object.keys(errorCodes) as ErrorCode[];
     const status = statuses[Math.floor(Math.random() * statuses.length)];
+    const targetMeters = 2000;
+    const actualMeters = Math.floor(Math.random() * targetMeters);
+
     return {
       id: `MÁY ${String(id).padStart(2, "0")}`,
-      efficiency: Math.floor(Math.random() * 100),
-      targetMeters: 2000,
-      actualMeters: Math.floor(1800 + Math.random() * 200),
+      targetMeters,
+      actualMeters,
       targetRpm: 1500,
-      actualRpm: 1500,
+      actualRpm: Math.floor(1200 + Math.random() * 300),
       status,
       errorMessage: errorCodes[status].message,
     };
@@ -107,6 +108,10 @@ export default function Home() {
     return errorCodes[status]?.color || "#22c55e";
   };
 
+  const calculateEfficiency = (actual: number, target: number) => {
+    return Math.round((actual / target) * 100);
+  };
+
   const StatusLegend = () => {
     const errorItems = [
       { label: "Đứt sợi trên", color: "#ef4444" },
@@ -120,7 +125,6 @@ export default function Home() {
       { label: "Máy dừng", color: "#1d4ed8" },
       { label: "Máy chạy", color: "#22c55e" },
       { label: "Máy tắt", color: "#6b7280" },
-      { label: "Thời gian còn lại", color: "#ffffff" },
     ];
 
     const LegendItem = ({
@@ -128,23 +132,26 @@ export default function Home() {
     }: {
       item: { label: string; color: string };
     }) => (
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3 bg-gray-800 px-3 py-2 rounded-full">
         <div
-          className="w-4 h-4 rounded-full shrink-0"
+          className="w-3 h-3 rounded-full shrink-0"
           style={{ backgroundColor: item.color }}
         />
-        <span className="text-xl whitespace-nowrap">{item.label}</span>
+        <span className="text-sm font-medium whitespace-nowrap">
+          {item.label}
+        </span>
       </div>
     );
 
     return (
-      <div className="flex flex-col gap-4">
-        <div className="grid grid-cols-5 gap-x-8">
+      <div className="flex flex-col gap-3 bg-gray-900 p-4 rounded-lg shadow-lg">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
           {errorItems.map((item, index) => (
             <LegendItem key={`error-${index}`} item={item} />
           ))}
         </div>
-        <div className="grid grid-cols-5 gap-x-8">
+        {/* <div className="h-px bg-gray-700 w-full my-1"></div> */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
           {statusItems.map((item, index) => (
             <LegendItem key={`status-${index}`} item={item} />
           ))}
@@ -154,107 +161,71 @@ export default function Home() {
   };
 
   const MachineCard = ({ machine }: { machine: MachineData }) => {
-    const chartRef = React.useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-      if (chartRef.current) {
-        const chart = echarts.init(chartRef.current);
-
-        const option = {
-          tooltip: {
-            trigger: "item",
-            formatter: "{b}: {c} ({d}%)", // Hiển thị tên, giá trị và phần trăm khi hover
-          },
-          legend: {
-            show: false, // Ẩn chú thích
-          },
-          series: [
-            {
-              name: "Hiệu suất",
-              type: "pie",
-              radius: ["40%", "70%"],
-              avoidLabelOverlap: false,
-              label: {
-                show: false, // Ẩn nhãn trên từng phần
-              },
-              labelLine: {
-                show: false,
-              },
-              data: [
-                {
-                  value: machine.efficiency,
-                  name: "Hiệu suất",
-                  itemStyle: { color: getStatusColor(machine.status) },
-                },
-                {
-                  value: 100 - machine.efficiency,
-                  name: "Còn lại",
-                  itemStyle: { color: "#374151" }, // Màu xám đậm
-                },
-              ],
-            },
-          ],
-          graphic: {
-            type: "text",
-            left: "center",
-            top: "center",
-            style: {
-              text: `${machine.efficiency}%`, // Hiển thị hiệu suất ở giữa
-              textAlign: "center",
-              fill: "#fff", // Màu chữ trắng
-              fontSize: 20,
-              fontWeight: "bold",
-            },
-          },
-        };
-
-        chart.setOption(option);
-
-        // Resize chart khi kích thước cửa sổ thay đổi
-        window.addEventListener("resize", () => {
-          chart.resize();
-        });
-
-        return () => {
-          chart.dispose();
-          window.removeEventListener("resize", () => {
-            chart.resize();
-          });
-        };
-      }
-    }, [machine]);
+    const efficiency = calculateEfficiency(
+      machine.actualMeters,
+      machine.targetMeters
+    );
 
     return (
-      <div className="bg-gray-800 p-4 rounded-lg">
-        <h2 className="text-center text-2xl font-bold">{machine.id}</h2>
-
-        <div className="w-48 h-48 mx-auto relative">
-          <div ref={chartRef} className="w-full h-full"></div>
+      <div className="bg-gradient-to-br from-gray-900 to-gray-950 p-4 rounded-xl shadow-lg border border-gray-800 transition-all duration-300 hover:shadow-xl hover:shadow-blue-900/20 hover:border-blue-800">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-cyan-300">
+            {machine.id}
+          </h2>
+          <div className="bg-gray-800 rounded-full px-3 py-1">
+            <span className="font-bold text-lg text-white">{efficiency}%</span>
+          </div>
         </div>
 
-        <div className="space-y-1 text-xl">
-          <div className="flex justify-between">
-            <span>Số mét đặt:</span>
-            <span>{machine.targetMeters} M</span>
+        {/* Progress bar with improved styling */}
+        <div className="w-full bg-gray-800 rounded-lg h-6 relative overflow-hidden mb-3 shadow-inner">
+          <div
+            className="h-full rounded-lg transition-all duration-500 flex items-center"
+            style={{
+              width: `${efficiency}%`,
+              background:
+                efficiency > 90
+                  ? "linear-gradient(90deg, #10b981, #059669)"
+                  : efficiency > 70
+                  ? "linear-gradient(90deg, #f59e0b, #d97706)"
+                  : "linear-gradient(90deg, #ef4444, #b91c1c)",
+              minWidth: "40px",
+            }}
+          >
+            <div className="w-full h-full opacity-30 bg-[radial-gradient(at_right_top,_white,_transparent)] absolute"></div>
           </div>
-          <div className="flex justify-between">
-            <span>Số mét thực:</span>
-            <span>{machine.actualMeters} M</span>
+
+          {/* Meter information with improved layout */}
+          <div className="absolute top-0 left-0 w-full h-full flex justify-between items-center px-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-300">
+                Thực tế:
+              </span>
+              <span className="font-bold text-sm text-white">
+                {machine.actualMeters}M
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-300">Đặt:</span>
+              <span className="font-bold text-sm text-white">
+                {machine.targetMeters}M
+              </span>
+            </div>
           </div>
-          <div className="flex justify-between">
-            <span>Tốc độ đặt:</span>
-            <span>{machine.targetRpm} Rpm</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Tốc độ thực:</span>
-            <span>{machine.actualRpm} Rpm</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Mã lỗi:</span>
-            <span
-              className="text-center mb-3 text-lg"
-              style={{ color: getStatusColor(machine.status) }}
-            >
+        </div>
+
+        {/* Status section with improved visual style */}
+        <div className="flex justify-between items-center pt-3 border-t border-gray-800">
+          <span className="font-medium text-sm text-gray-400">Trạng thái:</span>
+          <div
+            className="text-sm font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5"
+            style={{
+              backgroundColor: getStatusColor(machine.status),
+              opacity: 0.95,
+            }}
+          >
+            <div className="w-2 h-2 rounded-full bg-white animate-pulse"></div>
+            <span className="text-white">
               {`${machine.status} - ${machine.errorMessage}`}
             </span>
           </div>
@@ -287,37 +258,37 @@ export default function Home() {
     }, [currentPage]);
 
     return (
-      <div className="flex items-center gap-8">
+      <div className="flex items-center gap-8 bg-gray-800 p-4 rounded-xl shadow-lg">
         <div className="flex items-center gap-4">
-          <label className="flex items-center gap-2">
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
             <input
               type="checkbox"
               checked={autoScroll}
               onChange={(e) => setAutoScroll(e.target.checked)}
-              className="w-4 h-4"
+              className="w-4 h-4 rounded accent-blue-500"
             />
             <span>Tự động chuyển trang</span>
           </label>
 
           <div className="flex items-center gap-2">
-            <span>Thời gian:</span>
+            <span className="text-sm">Thời gian:</span>
             <input
               type="number"
               min="1"
               max="60"
               value={scrollInterval}
               onChange={(e) => setScrollInterval(Number(e.target.value))}
-              className="w-16 p-1 text-center bg-gray-800 text-white border rounded"
+              className="w-16 p-1 text-center bg-gray-900 text-white border border-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
-            <span>giây</span>
+            <span className="text-sm">giây</span>
           </div>
         </div>
 
-        <div className="flex items-center gap-4 border-l border-gray-700 pl-8">
+        <div className="flex items-center gap-4 border-l border-gray-700 pl-4">
           <button
             onClick={() => setCurrentPage(currentPage - 1)}
             disabled={currentPage === 1}
-            className="p-2 bg-gray-700 rounded disabled:opacity-50"
+            className="p-2 bg-gray-700 hover:bg-gray-600 rounded-md disabled:opacity-50 transition-colors"
           >
             <svg
               className="w-5 h-5"
@@ -335,22 +306,22 @@ export default function Home() {
           </button>
 
           <div className="flex items-center gap-2">
-            <span>Trang</span>
+            <span className="text-sm">Trang</span>
             <input
               type="text"
               value={pageInput}
               onChange={handlePageChange}
               onBlur={handlePageSubmit}
               onKeyDown={(e) => e.key === "Enter" && handlePageSubmit()}
-              className="w-12 p-1 text-center bg-gray-800 text-white border rounded"
+              className="w-12 p-1 text-center bg-gray-900 text-white border border-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
-            <span>/{totalPages}</span>
+            <span className="text-sm">/ {totalPages}</span>
           </div>
 
           <button
             onClick={() => setCurrentPage(currentPage + 1)}
             disabled={currentPage === totalPages}
-            className="p-2 bg-gray-700 rounded disabled:opacity-50"
+            className="p-2 bg-gray-700 hover:bg-gray-600 rounded-md disabled:opacity-50 transition-colors"
           >
             <svg
               className="w-5 h-5"
@@ -373,12 +344,12 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-gray-900">
-      <div className="p-2 text-white">
+      <div className="p-4 text-white">
         <h1 className="text-2xl mb-4 text-center">
           Dashboard - Trạng thái máy
         </h1>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 mb-0">
           {getCurrentPageMachines().map((machine) => (
             <MachineCard key={machine.id} machine={machine} />
           ))}

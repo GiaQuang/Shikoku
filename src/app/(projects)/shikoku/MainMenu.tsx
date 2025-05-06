@@ -1,25 +1,23 @@
 "use client";
 import React, { useState } from "react";
 import Image from "next/image";
-import { FaTableCellsLarge } from "react-icons/fa6";
+// import { FaTableCellsLarge } from "react-icons/fa6";
 import {
-  HomeOutlined,
   MailOutlined,
-  OrderedListOutlined,
   SettingOutlined,
   BarChartOutlined,
-  FileSearchOutlined,
-  SolutionOutlined,
-  HddOutlined,
   LeftCircleOutlined,
   RightCircleOutlined,
 } from "@ant-design/icons";
-import { MdOutlineElectricBolt } from "react-icons/md";
-import { IoWaterOutline } from "react-icons/io5";
+import { MdTimeline } from "react-icons/md";
+import { BsCalendar2Day, BsCalendar2Month } from "react-icons/bs";
+import { BiSolidError } from "react-icons/bi";
 import { LuLayoutDashboard } from "react-icons/lu";
+import { GrVirtualMachine } from "react-icons/gr";
 import { usePathname, useRouter } from "next/navigation";
 import { motion as m } from "framer-motion";
 import { useSessionStorage } from "usehooks-ts";
+import { HiOutlineStatusOnline } from "react-icons/hi";
 export default function MyMenu({ set_is_show }: { set_is_show: Function }) {
   const [is_show, setIsShow, remove_is_show] = useSessionStorage(
     "key_show_menu",
@@ -36,31 +34,52 @@ export default function MyMenu({ set_is_show }: { set_is_show: Function }) {
       children: [],
     },
     {
-      key: "/shikoku/thiet_bi",
-      icon: <FaTableCellsLarge style={{ fontSize: 24 }} />,
-      label: <div className="text-sm"> {`Thiết bị`}</div>,
-      link: "/shikoku/thiet_bi",
+      key: "/shikoku/timeline",
+      icon: <MdTimeline style={{ fontSize: 24 }} />,
+      label: <div className="text-sm"> {`Timeline`}</div>,
+      link: "/shikoku/timeline",
       children: [],
     },
     {
-      key: "/shikoku/thong_ke",
+      key: "/shikoku/thong_ke_loi",
       icon: <BarChartOutlined style={{ fontSize: 24 }} />,
-      label: <div className="text-sm">{`Thống kê`}</div>,
-      link: `/shikoku/thong_ke`,
+      label: <div className="text-sm">{`Thống kê lỗi`}</div>,
+      link: `/shikoku/thong_ke_loi`,
       children: [
         {
-          key: "/shikoku/thong_ke/dien",
-          icon: <MdOutlineElectricBolt style={{ fontSize: 24 }} />,
-          label: <div className="text-sm">{`Điện`}</div>,
-          link: `/shikoku/thong_ke/dien`,
+          key: "/shikoku/thong_ke_loi/loi_theo_ngay",
+          icon: <BsCalendar2Day style={{ fontSize: 24 }} />,
+          label: <div className="text-sm">{`Lỗi theo ngày`}</div>,
+          link: `/shikoku/thong_ke_loi/loi_theo_ngay`,
         },
         {
-          key: "/shikoku/thong_ke/nuoc",
-          icon: <IoWaterOutline style={{ fontSize: 24 }} />,
-          label: <div className="text-sm">{`Nước`}</div>,
-          link: `/shikoku/thong_ke/nuoc`,
+          key: "/shikoku/thong_ke_loi/loi_theo_thang",
+          icon: <BsCalendar2Month style={{ fontSize: 24 }} />,
+          label: <div className="text-sm">{`Lỗi theo tháng`}</div>,
+          link: `/shikoku/thong_ke_loi/loi_theo_thang`,
         },
       ],
+    },
+    {
+      key: "bao_cao_loi",
+      icon: <BiSolidError style={{ fontSize: 24 }} />,
+      label: <div className="text-sm">{`Báo cáo lỗi`}</div>,
+      link: `/shikoku/bao_cao_loi`,
+      children: [],
+    },
+    {
+      key: "trang_thai_may",
+      icon: <GrVirtualMachine style={{ fontSize: 24 }} />,
+      label: <div className="text-sm">{`Trạng thái máy`}</div>,
+      link: `/shikoku/trang_thai_may`,
+      children: [],
+    },
+    {
+      key: "trang_thai_ket_noi",
+      icon: <HiOutlineStatusOnline style={{ fontSize: 24 }} />,
+      label: <div className="text-sm">{`Kết nối`}</div>,
+      link: `/shikoku/trang_thai_ket_noi`,
+      children: [],
     },
     {
       key: "cai_dat",

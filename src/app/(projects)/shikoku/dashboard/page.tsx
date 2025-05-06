@@ -1,699 +1,562 @@
 "use client";
-import { InputRef } from "antd/es/input";
-import { useEffect, useRef, useState } from "react";
-import { useInterval, useWindowSize } from "usehooks-ts";
-import { Input } from "antd";
-import { toast } from "react-toastify";
-import { TYPE_CPU } from "../database";
-import {
-  api_get_chart_dien,
-  api_get_chart_nuoc,
-  api_get_cpu_info,
-  api_get_data_dashboard,
-  api_get_list_name_dien,
-  api_get_list_name_nuoc,
-  api_get_total_cs_tieu_thu,
-  api_set_plc_ip_value,
-  api_set_plc_port_value,
-} from "../api";
-import { Select, DatePicker } from "antd";
-import type { DatePickerProps } from "antd";
+import React, { useState, useMemo } from "react";
+import { useInterval } from "usehooks-ts";
+import Link from "next/link";
 import ReactECharts from "echarts-for-react";
-import { GiPowerLightning } from "react-icons/gi";
-import { IoWaterOutline } from "react-icons/io5";
-import { MdAttachMoney } from "react-icons/md";
-import { MdElectricBolt } from "react-icons/md";
-import { random_int } from "@/app/utils/utils";
+import { api_get_full_machines } from "../api";
 
-function BieuDoNangLuongThangTruocThangNay({
-  data,
-}: {
-  data: { category: string[]; value1: number[]; value2: number[] };
-}) {
-  const [legend, setLegend] = useState([true, true, true]);
-  const [onEvents, setOnEvent] = useState({
-    legendselectchanged: (e: any) => {
-      console.log(e);
-      let data = [
-        e["selected"]["Giá trị đo"],
-        e["selected"]["Giá trị min"],
-        e["selected"]["Giá trị max"],
-      ];
-      setLegend(data);
-    },
-  });
-  const option = {
-    animation: true,
-    legend: {
-      show: true,
-      textStyle: { color: "#fff" },
-    },
-    grid: {
-      top: 30,
-      bottom: 50,
-      left: 60,
-      right: 10,
-    },
-    tooltip: {
-      trigger: "axis",
-      axisPointer: {
-        type: "shadow",
-      },
-    },
-    xAxis: [
-      {
-        type: "category",
-        data: data["category"],
-        axisTick: {
-          alignWithLabel: true,
-        },
-        name: "Thời gian",
-        nameTextStyle: {
-          color: "#fff",
-          fontWeight: "bold",
-        },
-        axisLabel: {
-          color: "#fff",
-          fontSize: 12,
-          rotate: 45,
-        },
-      },
-    ],
-    yAxis: [
-      {
-        type: "value",
-        name: "Điện năng (kWh)",
-        nameTextStyle: {
-          color: "#fff",
-          fontWeight: "bold",
-          fontSize: 14,
-          fontFamily: "consola",
-        },
-        axisLabel: {
-          color: "#fff",
-          fontSize: 12,
-        },
-        splitLine: {
-          lineStyle: {
-            color: "#ffffff40",
-          },
-        },
-      },
-    ],
-    series: [
-      {
-        name: "Tháng trước (kWh)",
-        type: "bar",
-        barWidth: "30%",
-        itemStyle: {
-          color: "#555555AA",
-          borderColor: "#666",
-          borderWidth: 1.5,
-          borderRadius: [3, 3, 0, 0],
-        },
-        data: data["value1"],
-      },
-      {
-        name: "Tháng này (kWh)",
-        type: "bar",
-        barWidth: "30%",
-        itemStyle: {
-          color: "#ff0000AA",
-          borderColor: "#ff0000",
-          borderWidth: 2,
-          borderRadius: [3, 3, 0, 0],
-        },
-        data: data["value2"],
-      },
-    ],
-  };
-  return (
-    <div
-      className="w-full h-full flex flex-col text-lg border-[1px] border-[#ff0000] rounded-md p-2
-                    bg-gradient-to-b from-[#a6a5b822] via-[#a6a5b844] to-[#a6a5b833]
-                    shadow-[0px_0px_2px_2px_#ff000088] "
-    >
-      <div className="flex flex-row w-full items-center gap-2">
-        <div className="pl-2 w-full text-center">
-          ĐIỆN NĂNG TIÊU THỤ THÁNG TRƯỚC / THÁNG NÀY
-        </div>
-      </div>
-      <div className={`flex-1 w-full mt-3`}>
-        <ReactECharts
-          style={{ width: `${100}px` }} //Phải có để tự co dãn
-          option={option}
-          notMerge={true}
-          lazyUpdate={true}
-          className="flex-1 min-w-full min-h-full m-0 p-0"
-          onEvents={onEvents}
-        />
-      </div>
-    </div>
-  );
-}
-function BieuDoNangLuongHomNay({
-  data,
-}: {
-  data: { category: string[]; value: number[]; name: string };
-}) {
-  const [legend, setLegend] = useState([true, true, true]);
-  const [onEvents, setOnEvent] = useState({
-    legendselectchanged: (e: any) => {
-      console.log(e);
-      let data = [
-        e["selected"]["Giá trị đo"],
-        e["selected"]["Giá trị min"],
-        e["selected"]["Giá trị max"],
-      ];
-      setLegend(data);
-    },
-  });
-  const option = {
-    animation: true,
-    legend: {
-      show: false,
-      textStyle: { color: "#fff" },
-    },
-    grid: {
-      top: 30,
-      bottom: 50,
-      left: 60,
-      right: 10,
-    },
-    tooltip: {
-      trigger: "axis",
-      axisPointer: {
-        type: "shadow",
-      },
-    },
-    xAxis: [
-      {
-        type: "category",
-        data: data["category"],
-        axisTick: {
-          alignWithLabel: true,
-        },
-        name: data["name"],
-        nameTextStyle: {
-          color: "#fff",
-          fontWeight: "bold",
-        },
-        axisLabel: {
-          color: "#fff",
-          fontSize: 12,
-          rotate: 45,
-        },
-      },
-    ],
-    yAxis: [
-      {
-        type: "value",
-        name: "Điện năng (kWh)",
-        nameTextStyle: {
-          color: "#fff",
-          fontWeight: "bold",
-          fontSize: 14,
-          fontFamily: "consola",
-        },
-        axisLabel: {
-          color: "#fff",
-          fontSize: 12,
-        },
-        splitLine: {
-          lineStyle: {
-            color: "#ffffff40",
-          },
-        },
-      },
-    ],
-    series: [
-      {
-        name: "Tiêu thụ (kWh)",
-        type: "bar",
-        barWidth: "60%",
-        itemStyle: {
-          color: "#ff0000AA",
-          borderColor: "#ff0000",
-          borderWidth: 2,
-          borderRadius: [3, 3, 0, 0],
-        },
-        data: data["value"],
-      },
-    ],
-  };
-  return (
-    <div
-      className="w-full h-full flex flex-col text-lg border-[1px] border-[#ff0000] rounded-md p-2
-                    bg-gradient-to-b from-[#a6a5b822] via-[#a6a5b844] to-[#a6a5b833]
-                    shadow-[0px_0px_2px_2px_#ff000088] "
-    >
-      <div className="flex flex-row w-full items-center gap-2">
-        <div className="pl-2 w-full text-center">
-          ĐIỆN NĂNG TIÊU THỤ HÔM NAY
-        </div>
-      </div>
-      <div className={`flex-1 w-full mt-3`}>
-        <ReactECharts
-          style={{ width: `${100}px` }} //Phải có để tự co dãn
-          option={option}
-          notMerge={true}
-          lazyUpdate={true}
-          className="flex-1 min-w-full min-h-full m-0 p-0"
-          onEvents={onEvents}
-        />
-      </div>
-    </div>
-  );
-}
-function BieuDoNuocThangTruocThangNay({
-  data,
-}: {
-  data: { category: string[]; value1: number[]; value2: number[] };
-}) {
-  // const [data, setData] = useState(
-  //     {
-  //         'category': Array.from(Array(31).keys(), (value, idx) => {
-  //             return `N${idx + 1}`;
-  //         }),
-  //         'value1': Array.from(Array(31).keys(), (value, idx) => {
-  //             return random_int(100, 1000);
-  //         }),
-  //         'value2': Array.from(Array(31).keys(), (value, idx) => {
-  //             return random_int(100, 1000);
-  //         }),
-  //     });
-  const [legend, setLegend] = useState([true, true, true]);
-  const [onEvents, setOnEvent] = useState({
-    legendselectchanged: (e: any) => {
-      console.log(e);
-      let data = [
-        e["selected"]["Giá trị đo"],
-        e["selected"]["Giá trị min"],
-        e["selected"]["Giá trị max"],
-      ];
-      setLegend(data);
-    },
-  });
-  const option = {
-    animation: true,
-    legend: {
-      show: true,
-      textStyle: { color: "#fff" },
-    },
-    grid: {
-      top: 30,
-      bottom: 50,
-      left: 60,
-      right: 10,
-    },
-    tooltip: {
-      trigger: "axis",
-      axisPointer: {
-        type: "shadow",
-      },
-    },
-    xAxis: [
-      {
-        type: "category",
-        data: data["category"],
-        axisTick: {
-          alignWithLabel: true,
-        },
-        name: "Thời gian",
-        nameTextStyle: {
-          color: "#fff",
-          fontWeight: "bold",
-        },
-        axisLabel: {
-          color: "#fff",
-          fontSize: 12,
-          rotate: 45,
-        },
-      },
-    ],
-    yAxis: [
-      {
-        type: "value",
-        name: "Lượng nước (m3)",
-        nameTextStyle: {
-          color: "#fff",
-          fontWeight: "bold",
-          fontSize: 14,
-          fontFamily: "consola",
-        },
-        axisLabel: {
-          color: "#fff",
-          fontSize: 12,
-        },
-        splitLine: {
-          lineStyle: {
-            color: "#ffffff40",
-          },
-        },
-      },
-    ],
-    series: [
-      {
-        name: "Tháng trước (m3)",
-        type: "bar",
-        barWidth: "30%",
-        itemStyle: {
-          color: "#555555AA",
-          borderColor: "#666",
-          borderWidth: 1.5,
-          borderRadius: [3, 3, 0, 0],
-        },
-        data: data["value1"],
-      },
-      {
-        name: "Tháng này (m3)",
-        type: "bar",
-        barWidth: "30%",
-        itemStyle: {
-          color: "#00ff00AA",
-          borderColor: "#00ff00",
-          borderWidth: 2,
-          borderRadius: [3, 3, 0, 0],
-        },
-        data: data["value2"],
-      },
-    ],
-  };
-  return (
-    <div
-      className="w-full h-full flex flex-col text-lg border-[1px] border-[#00ff00] rounded-md p-2
-                    bg-gradient-to-b from-[#a6a5b855] via-[#18172e99] to-[#0b0925cc]
-                    shadow-[0px_0px_2px_2px_#00ff0088] "
-    >
-      <div className="flex flex-row w-full items-center gap-2">
-        <div className="pl-2 w-full text-center">
-          LƯỢNG NƯỚC TIÊU THỤ THÁNG TRƯỚC / THÁNG NÀY
-        </div>
-      </div>
-      <div className={`flex-1 h-full w-full mt-3`}>
-        <ReactECharts
-          style={{ width: `${100}px` }} //Phải có để tự co dãn
-          option={option}
-          notMerge={true}
-          lazyUpdate={true}
-          className="flex-1 min-w-full min-h-full m-0 p-0"
-          onEvents={onEvents}
-        />
-      </div>
-    </div>
-  );
+type ErrorCode =
+  | "e01"
+  | "e02"
+  | "e03"
+  | "e04"
+  | "e05"
+  | "e06"
+  | "e07"
+  | "e08"
+  | "e09"
+  | "e10"
+  | "e11"
+  | "e12"
+  | "e13"
+  | "e14";
+
+type MachineData = {
+  id: number;
+  status: boolean;
+  so_met_dat: number;
+  so_met_thuc: number;
+  toc_do_dat: number;
+  toc_do_thuc: number;
+  hieu_suat: number;
+  ma_loi: ErrorCode;
+};
+
+const errorCodes: Record<string, { message: string; color: string }> = {
+  e01: { message: "Đứt sợi trên", color: "#ef4444" },
+  e02: { message: "Đứt sợi dưới", color: "#ef4444" },
+  e03: { message: "Đứt lõi cách điện", color: "#93c5fd" },
+  e04: { message: "Đứt băng nhôm", color: "#f97316" },
+  e05: { message: "Bơm dầu không lên", color: "#a855f7" },
+  e06: { message: "Mức dầu thấp", color: "#a855f7" },
+  e07: { message: "Quá tải bơm dầu", color: "#a855f7" },
+  e08: { message: "Lỗi biến tần", color: "#a855f7" },
+  e09: { message: "Truyền thông biến tần", color: "#a855f7" },
+  e10: { message: "Lỗi trục cuốn", color: "#a855f7" },
+  e11: { message: "Báo động maoci", color: "#a855f7" },
+  e12: { message: "Cửa mở", color: "#a855f7" },
+  e13: { message: "Đang dừng khẩn cấp", color: "#a855f7" },
+  e14: { message: "Đạt chiều dài", color: "#a855f7" },
+};
+
+const statusTypes = [
+  { value: 0, name: "Máy chạy", color: "#34d399" },
+  { value: 1, name: "Máy dừng", color: "#9ca3af" },
+  { value: 2, name: "Máy tắt", color: "#3b82f6" },
+  { value: 3, name: "Đứt sợi trên", color: "#f87171" },
+  { value: 4, name: "Đứt sợi dưới", color: "#fbbf24" },
+  { value: 5, name: "Đứt lõi cách điện", color: "#60a5fa" },
+  { value: 6, name: "Đứt lõi băng nhôm", color: "#facc15" },
+  { value: 7, name: "Lỗi khác", color: "#a78bfa" },
+];
+
+const groupSize = 20;
+const totalMachines = 200;
+const machines = Array.from({ length: totalMachines }, (_, i) => ` ${i + 1}`);
+const machineGroups: string[][] = [];
+
+for (let i = 0; i < machines.length; i += groupSize) {
+  machineGroups.push(machines.slice(i, i + groupSize));
 }
 
-function BieuDoNuocHomNay({
-  data,
-}: {
-  data: { category: string[]; value: number[]; name: string };
-}) {
-  const [legend, setLegend] = useState([true, true, true]);
-  const [onEvents, setOnEvent] = useState({
-    legendselectchanged: (e: any) => {
-      console.log(e);
-      let data = [
-        e["selected"]["Giá trị đo"],
-        e["selected"]["Giá trị min"],
-        e["selected"]["Giá trị max"],
-      ];
-      setLegend(data);
-    },
+export default function Overview() {
+  const [systemData, setSystemData] = useState({
+    totalMachines: 0,
+    runningMachines: 0,
+    stoppedMachines: 0,
+    offMachines: 0,
+    averageEfficiency: 0,
+    errorDistribution: {} as Record<string, number>,
+    highEfficiencyMachines: 0,
+    lowEfficiencyMachines: 0,
+    machinesByError: {} as Record<string, string[]>,
+    totalActualMeters: 0,
+    totalTargetMeters: 0,
+    machineStatuses: [] as {
+      id: string;
+      statusType: number;
+      statusName: string;
+    }[],
   });
-  const option = {
-    animation: true,
-    legend: {
-      show: false,
-      textStyle: { color: "#fff" },
-    },
-    grid: {
-      top: 30,
-      bottom: 50,
-      left: 60,
-      right: 10,
-    },
-    tooltip: {
-      trigger: "axis",
-      axisPointer: {
-        type: "shadow",
-      },
-    },
-    xAxis: [
-      {
-        type: "category",
-        data: data["category"],
-        axisTick: {
-          alignWithLabel: true,
-        },
-        name: data["name"],
-        nameTextStyle: {
-          color: "#fff",
-          fontWeight: "bold",
-        },
-        axisLabel: {
-          color: "#fff",
-          fontSize: 12,
-          rotate: 45,
-        },
-      },
-    ],
-    yAxis: [
-      {
-        type: "value",
-        name: "Lượng nước (m3)",
-        nameTextStyle: {
-          color: "#fff",
-          fontWeight: "bold",
-          fontSize: 14,
-          fontFamily: "consola",
-        },
-        axisLabel: {
-          color: "#fff",
-          fontSize: 12,
-        },
-        splitLine: {
-          lineStyle: {
-            color: "#ffffff40",
-          },
-        },
-      },
-    ],
-    series: [
-      {
-        name: "Lượng nước (m3)",
-        type: "bar",
-        barWidth: "60%",
-        itemStyle: {
-          color: "#00ff00AA",
-          borderColor: "#00ff00",
-          borderWidth: 2,
-          borderRadius: [3, 3, 0, 0],
-        },
-        data: data["value"],
-      },
-    ],
-  };
-  return (
-    <div
-      className="w-full h-full flex flex-col text-lg border-[1px] border-[#00ff00] rounded-md p-2
-                    bg-gradient-to-b from-[#a6a5b855] via-[#18172e99] to-[#0b0925cc]
-                    shadow-[0px_0px_2px_2px_#00ff0088] "
-    >
-      <div className="flex flex-row w-full items-center gap-2">
-        <div className="pl-2 text-center w-full">
-          LƯỢNG NƯỚC TIÊU THỤ HÔM NAY
-        </div>
-      </div>
-      <div className={`flex-1 h-full w-full mt-3`}>
-        <ReactECharts
-          style={{ width: `${100}px` }} //Phải có để tự co dãn
-          option={option}
-          notMerge={true}
-          lazyUpdate={true}
-          className="flex-1 min-w-full min-h-full m-0 p-0"
-          onEvents={onEvents}
-        />
-      </div>
-    </div>
-  );
-}
+  const [cycle, setCycle] = useState<number | null>(100);
 
-export default function Page() {
-  const [cong_suat_today, setCongSuatToday] = useState<number | any>(0);
-  const [data_dashboard, setDataDashboard] = useState<any>({
-    total_dien_today: 0,
-    total_nuoc_today: 0,
-    chart_dien: {
-      category: [],
-      value: [],
-      name: "",
-    },
-    chart_nuoc: {
-      category: [],
-      value: [],
-      name: "",
-    },
-    chart_ss_dien: { category: [], value1: [], value2: [] },
-    chart_ss_nuoc: { category: [], value1: [], value2: [] },
-    dien_nang_thang_nay: 0,
-    tien_dien_thang_nay: 0,
-    luong_nuoc_thang_nay: 0,
-    tien_nuoc_thang_nay: 0,
-  });
-  const [cycle, setCycle] = useState<null | number>(100);
-  const [cycle_dashboard, setCycleDashboard] = useState<null | number>(100);
+  const mapErrorToStatusType = (errorCode: ErrorCode): number => {
+    if (!errorCode) return 8;
+    switch (errorCode.toLowerCase()) {
+      case "e01":
+        return 3;
+      case "e02":
+        return 4;
+      case "e03":
+        return 5;
+      case "e04":
+        return 6;
+      default:
+        return 7;
+    }
+  };
+
+  const getStatusName = (statusType: number): string => {
+    const status = statusTypes.find((s) => s.value === statusType);
+    return status ? status.name : "Không xác định";
+  };
+
   useInterval(async () => {
     setCycle(null);
-    let res = await api_get_total_cs_tieu_thu();
-    if (res == undefined) {
-      setCycle(3000);
-      return;
+    try {
+      const res = await api_get_full_machines();
+      if (!res) {
+        console.log("Lỗi lấy dữ liệu từ API");
+        setCycle(3000);
+        return;
+      }
+
+      console.log("Lấy data từ API: OK", res);
+      const data = res instanceof Response ? await res.json() : res;
+
+      const machines: MachineData[] = data.machines;
+      const errorDistribution: Record<string, number> = {};
+      const machinesByError: Record<string, string[]> = {};
+
+      Object.keys(errorCodes).forEach((key) => {
+        errorDistribution[key] = 0;
+        machinesByError[key] = [];
+      });
+
+      machines.forEach((machine) => {
+        if (machine?.ma_loi) {
+          const errorKey = machine.ma_loi.toLowerCase();
+          if (errorCodes[errorKey]) {
+            errorDistribution[errorKey]++;
+            machinesByError[errorKey].push(
+              `MÁY ${String(machine.id).padStart(2, "0")}`
+            );
+          }
+        }
+      });
+
+      const machineStatuses = machines.map((machine) => {
+        const statusType = machine.status
+          ? machine.toc_do_thuc > 0
+            ? 0
+            : 1
+          : 2;
+        return {
+          id: `MÁY ${String(machine.id).padStart(2, "0")}`,
+          statusType: machine.ma_loi
+            ? mapErrorToStatusType(machine.ma_loi)
+            : statusType,
+          statusName: getStatusName(statusType),
+        };
+      });
+
+      setSystemData({
+        totalMachines: data.tong_may,
+        runningMachines: data.may_dang_chay,
+        stoppedMachines: data.may_dang_dung,
+        offMachines: data.tong_may - data.may_dang_chay - data.may_dang_dung,
+        averageEfficiency: data.hieu_suat_trung_binh,
+        errorDistribution,
+        highEfficiencyMachines: data.hieu_suat_cao,
+        lowEfficiencyMachines: data.hieu_suat_thap,
+        machinesByError,
+        totalActualMeters: data.tong_so_met_thuc_te,
+        totalTargetMeters: data.tong_so_met_thuc_te + data.tong_so_met_con_lai,
+        machineStatuses,
+      });
+    } catch (error) {
+      console.error("Error fetching data:", error);
+    } finally {
+      setCycle(1000);
     }
-    console.log(res);
-    setCongSuatToday(res);
-    setCycle(1000);
   }, cycle);
-  useInterval(async () => {
-    setCycleDashboard(null);
-    let res = await api_get_data_dashboard();
-    if (res == undefined) {
-      setCycleDashboard(5000);
-      return;
-    }
-    console.log(res);
-    setDataDashboard(res);
-    setCycleDashboard(5000);
-  }, cycle_dashboard);
+
+  const formatNumber = (num: number) =>
+    num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+
+  const heatmapOption = useMemo(() => {
+    const reversedMachineGroups = [...machineGroups].reverse();
+    const groupLabels = reversedMachineGroups.map(
+      (_, index) => `Nhóm ${machineGroups.length - index}`
+    );
+
+    const generateMachineData = () => {
+      const data = [];
+      for (
+        let groupIndex = 0;
+        groupIndex < reversedMachineGroups.length;
+        groupIndex++
+      ) {
+        for (let machineIndex = 0; machineIndex < groupSize; machineIndex++) {
+          const originalGroupIndex = machineGroups.length - 1 - groupIndex;
+          const overallIndex = originalGroupIndex * groupSize + machineIndex;
+          const statusValue =
+            systemData.machineStatuses[overallIndex]?.statusType ?? 2;
+          data.push([machineIndex, groupIndex, statusValue]);
+        }
+      }
+      return data;
+    };
+
+    return {
+      animation: false,
+      title: {
+        left: "center",
+        textStyle: { color: "#e5e7eb", fontSize: 18 },
+      },
+      tooltip: {
+        position: "top",
+        formatter: (params: any) => {
+          const groupIndex = params.data[1];
+          const machineIndex = params.data[0];
+          const machineId = reversedMachineGroups[groupIndex][machineIndex];
+          const status = statusTypes.find((s) => s.value === params.data[2]);
+          return `${machineId}: ${status?.name || "Không xác định"}`;
+        },
+      },
+      grid: {
+        height: "90%",
+        width: "100%",
+        top: "0%",
+        left: "0%",
+        right: "0%",
+      },
+      xAxis: {
+        type: "category",
+        data: Array.from({ length: groupSize }, (_, i) => i + 1),
+        splitArea: { show: false },
+        axisLabel: { show: false },
+      },
+      yAxis: {
+        type: "category",
+        data: groupLabels,
+        splitArea: { show: true },
+        axisLabel: { show: false },
+      },
+      visualMap: {
+        type: "piecewise",
+        min: 0,
+        max: 7,
+        calculable: false,
+        orient: "horizontal",
+        left: "center",
+        top: "95%",
+        pieces: [
+          { min: 0, max: 0, label: "Máy chạy", color: "#34d399" },
+          { min: 1, max: 1, label: "Máy dừng", color: "#9ca3af" },
+          { min: 2, max: 2, label: "Máy tắt", color: "#3b82f6" },
+          { min: 3, max: 3, label: "Đứt sợi trên", color: "#f87171" },
+          { min: 4, max: 4, label: "Đứt sợi dưới", color: "#fbbf24" },
+          { min: 5, max: 5, label: "Đứt lõi cách điện", color: "#60a5fa" },
+          { min: 6, max: 6, label: "Đứt lõi băng nhôm", color: "#facc15" },
+          { min: 7, max: 7, label: "Lỗi khác", color: "#a78bfa" },
+        ],
+        textStyle: { color: "#e5e7eb", fontSize: 14, fontWeight: "bold" },
+        itemWidth: 30,
+        itemHeight: 20,
+        itemGap: 20,
+      },
+      series: [
+        {
+          name: "Trạng thái máy",
+          type: "heatmap",
+          data: generateMachineData(),
+          label: {
+            show: true,
+            formatter: (params: any) => {
+              const groupIndex = params.data[1];
+              const machineIndex = params.data[0];
+              return reversedMachineGroups[groupIndex][machineIndex];
+            },
+            color: "#fff",
+            fontSize: 10,
+          },
+          itemStyle: { borderColor: "#1f2937", borderWidth: 1 },
+          emphasis: {
+            itemStyle: { shadowBlur: 10, shadowColor: "rgba(0, 0, 0, 0.5)" },
+          },
+        },
+      ],
+    };
+  }, [systemData.machineStatuses]);
 
   return (
-    <div
-      className={`text-white text-3xl font-bold w-full h-screen flex flex-col p-2 gap-2 pt-4
-                `}
-    >
-      <div className={`m-1 text-center`}>PHẦN MỀM GIÁM SÁT NĂNG LƯỢNG</div>
-      <div className={`grid grid-cols-5 text-lg gap-2 min-h-40`}>
-        <div
-          className="flex flex-row rounded-md border-[#cccccccc] p-2 shadow-[inset_0px_0px_1px_1px_#fff] border-[1px]
-                    bg-[#8922a3]"
-        >
-          <GiPowerLightning
-            style={{ fontSize: 70 }}
-            className="items-center justify-center h-full"
-          />
-          <div className={`flex-1 flex flex-col items-center`}>
-            <div className="flex items-center justify-center text-center">
-              CÔNG SUẤT TIÊU THỤ
+    <main className="min-h-screen bg-gray-900 text-white font-sans w-full">
+      <div className="h-full w-full p-6">
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-teal-400 to-indigo-500 text-transparent bg-clip-text">
+            Dashboard ({totalMachines} máy)
+          </h1>
+          <Link
+            href="/shikoku/dashboard_chi_tiet"
+            className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 px-5 py-2.5 rounded-lg flex items-center text-sm font-medium transition-all duration-300"
+          >
+            <span>Xem chi tiết từng máy</span>
+            <svg
+              className="w-5 h-5 ml-2"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 5l7 7-7 7"
+              />
+            </svg>
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-4 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-700">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-lg font-semibold text-gray-200">
+                Tổng số máy
+              </h2>
+              <div className="bg-teal-900/30 p-1 rounded-lg">
+                <svg
+                  className="w-8 h-8 text-teal-500"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"
+                  />
+                </svg>
+              </div>
             </div>
-            <div className="flex-1 flex flex-col h-full items-center justify-center">
-              <div className="flex-1 text-5xl flex items-center justify-center">
-                {`${cong_suat_today}`}
-                <span className="text-sm  mt-4 ml-2 opacity-60">kW</span>
+            <div className="flex items-center mb-3">
+              <span className="text-4xl font-bold text-teal-400">
+                {systemData.totalMachines}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="bg-gray-700/40 p-2 rounded-lg">
+                <div className="text-xs text-gray-400">Đang chạy</div>
+                <div className="flex items-center">
+                  <div className="w-2 h-2 rounded-full bg-green-500 mr-1"></div>
+                  <div className="text-base font-semibold text-green-400">
+                    {systemData.runningMachines}
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-700/40 p-2 rounded-lg">
+                <div className="text-xs text-gray-400">Đang dừng</div>
+                <div className="flex items-center">
+                  <div className="w-2 h-2 rounded-full bg-blue-500 mr-1"></div>
+                  <div className="text-base font-semibold text-blue-400">
+                    {systemData.stoppedMachines}
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-700/40 p-2 rounded-lg">
+                <div className="text-xs text-gray-400">Đang tắt</div>
+                <div className="flex items-center">
+                  <div className="w-2 h-2 rounded-full bg-gray-500 mr-1"></div>
+                  <div className="text-base font-semibold text-gray-500">
+                    {systemData.offMachines}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-4 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-700">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-lg font-semibold text-gray-200">
+                Hiệu suất trung bình
+              </h2>
+              <div className="bg-green-900/30 p-1 rounded-lg">
+                <svg
+                  className="w-8 h-8 text-green-500"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+                  />
+                </svg>
+              </div>
+            </div>
+            <div className="flex items-center mb-3">
+              <span className="text-4xl font-bold text-green-400">
+                {systemData.averageEfficiency}%
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-gray-700/40 p-2 rounded-lg">
+                <div className="text-xs text-gray-400">
+                  Hiệu suất cao (≥85%)
+                </div>
+                <div className="flex items-center">
+                  <div className="w-2 h-2 rounded-full bg-green-500 mr-1"></div>
+                  <div className="text-base font-semibold text-green-400">
+                    {systemData.highEfficiencyMachines}
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-700/40 p-2 rounded-lg">
+                <div className="text-xs text-gray-400">
+                  Hiệu suất thấp (≤50%)
+                </div>
+                <div className="flex items-center">
+                  <div className="w-2 h-2 rounded-full bg-red-500 mr-1"></div>
+                  <div className="text-base font-semibold text-red-400">
+                    {systemData.lowEfficiencyMachines}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-4 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-700">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-lg font-semibold text-gray-200">
+                Tổng số lỗi trong ngày
+              </h2>
+              <div className="bg-red-900/30 p-1 rounded-lg">
+                <svg
+                  className="w-8 h-8 text-red-500"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                  />
+                </svg>
+              </div>
+            </div>
+            <div className="flex items-center mb-3">
+              <span className="text-4xl font-bold text-red-400">
+                {Object.values(systemData.errorDistribution).reduce(
+                  (a, b) => a + b,
+                  0
+                )}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-gray-700/40 p-2 rounded-lg">
+                <div className="text-xs text-gray-400">Lỗi hiển thị</div>
+                <div className="flex items-center">
+                  <div className="w-2 h-2 rounded-full bg-red-500 mr-1"></div>
+                  <div className="text-base font-semibold text-red-400">
+                    {(systemData.errorDistribution["e01"] || 0) +
+                      (systemData.errorDistribution["e02"] || 0) +
+                      (systemData.errorDistribution["e03"] || 0) +
+                      (systemData.errorDistribution["e04"] || 0)}
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-700/40 p-2 rounded-lg">
+                <div className="text-xs text-gray-400">Lỗi khác</div>
+                <div className="flex items-center">
+                  <div className="w-2 h-2 rounded-full bg-orange-500 mr-1"></div>
+                  <div className="text-base font-semibold text-orange-400">
+                    {Object.keys(systemData.errorDistribution)
+                      .filter(
+                        (key) => !["e01", "e02", "e03", "e04"].includes(key)
+                      )
+                      .reduce(
+                        (sum, key) => sum + systemData.errorDistribution[key],
+                        0
+                      )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-4 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-700">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-lg font-semibold text-gray-200">
+                Tiến độ sản xuất
+              </h2>
+              <div className="bg-purple-900/30 p-1 rounded-lg">
+                <svg
+                  className="w-8 h-8 text-purple-500"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                  />
+                </svg>
+              </div>
+            </div>
+            <div className="flex items-center mb-3">
+              <span className="text-4xl font-bold text-purple-400">
+                {Math.round(
+                  (systemData.totalActualMeters /
+                    systemData.totalTargetMeters) *
+                    100
+                )}
+                %
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-gray-700/40 p-2 rounded-lg">
+                <div className="text-xs text-gray-400">Mét thực tế</div>
+                <div className="flex items-center">
+                  <div className="w-2 h-2 rounded-full bg-blue-500 mr-1"></div>
+                  <div className="text-base font-semibold text-blue-400">
+                    {formatNumber(systemData.totalActualMeters)}
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-700/40 p-2 rounded-lg">
+                <div className="text-xs text-gray-400">Mét mục tiêu</div>
+                <div className="flex items-center">
+                  <div className="w-2 h-2 rounded-full bg-yellow-500 mr-1"></div>
+                  <div className="text-base font-semibold text-yellow-400">
+                    {formatNumber(systemData.totalTargetMeters)}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </div>
-        <div
-          className="flex flex-row rounded-md border-[#cccccccc] p-2 shadow-[inset_0px_0px_1px_1px_#fff] border-[1px]
-                    bg-[#da2218]"
-        >
-          <MdElectricBolt
-            style={{ fontSize: 70 }}
-            className="items-center justify-center h-full"
-          />
-          <div className={`flex-1 flex flex-col items-center`}>
-            <div className="flex items-center justify-center text-center">
-              ĐIỆN NĂNG TIÊU THỤ HÔM NAY
-            </div>
-            <div className="flex-1 flex flex-col h-full items-center justify-center">
-              <div className="flex-1 text-5xl flex items-center justify-center">
-                {`${data_dashboard["total_dien_today"]}`}
-                <span className="text-sm  mt-4 ml-2 opacity-60">kWh</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div
-          className="flex flex-row rounded-md border-[#cccccccc] p-2 shadow-[inset_0px_0px_1px_1px_#fff] border-[1px]
-                    bg-[#539241]"
-        >
-          <IoWaterOutline
-            style={{ fontSize: 70 }}
-            className="items-center justify-center h-full"
-          />
-          <div className={`flex-1 flex flex-col items-center`}>
-            <div className="flex items-center justify-center text-center">
-              LƯỢNG NƯỚC TIÊU THỤ HÔM NAY
-            </div>
-            <div className="flex-1 flex flex-col h-full items-center justify-center">
-              <div className="flex-1 text-5xl flex items-center justify-center">
-                {`${data_dashboard["total_nuoc_today"]}`}
-                <span className="text-sm  mt-4 ml-2 opacity-60">m3</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div
-          className="flex flex-row rounded-md border-[#cccccccc] p-2 shadow-[inset_0px_0px_1px_1px_#fff] border-[1px]
-                    bg-gradient-to-br to-[#273286] from-[#da2218]"
-        >
-          <MdAttachMoney
-            style={{ fontSize: 70 }}
-            className="items-center justify-center h-full"
-          />
-          <div className={`flex-1 flex flex-col items-center`}>
-            <div className="flex items-center justify-center text-center">
-              ĐIỆN NĂNG THÁNG NÀY
-            </div>
-            <div className="flex-1 flex flex-col h-full items-center justify-center">
-              <div className="flex-1 text-5xl flex items-center justify-center">
-                {`${data_dashboard["dien_nang_thang_nay"]}`}
-                <span className="text-sm  mt-4 ml-2 opacity-60">kWh</span>
-              </div>
-            </div>
-            <div className="text-xl flex items-center justify-center opacity-55">{`${data_dashboard["tien_dien_thang_nay"]} VNĐ`}</div>
-          </div>
-        </div>
-        <div
-          className="flex flex-row rounded-md border-[#cccccccc] p-2 shadow-[inset_0px_0px_1px_1px_#fff] border-[1px]
-                    bg-gradient-to-br to-[#273286] from-[#539241]"
-        >
-          <MdAttachMoney
-            style={{ fontSize: 70 }}
-            className="items-center justify-center h-full"
-          />
-          <div className={`flex-1 flex flex-col items-center`}>
-            <div className="flex items-center justify-center text-center">
-              LƯỢNG NƯỚC THÁNG NÀY
-            </div>
-            <div className="flex-1 flex flex-col h-full items-center justify-center">
-              <div className="flex-1 text-5xl flex items-center justify-center">
-                {`${data_dashboard["luong_nuoc_thang_nay"]}`}
-                <span className="text-sm  mt-4 ml-2 opacity-60">m3</span>
-              </div>
-            </div>
-            <div className="text-xl flex items-center justify-center opacity-55">{`${data_dashboard["tien_nuoc_thang_nay"]} VNĐ`}</div>
+
+        <div className="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700 w-full">
+          <h2 className="text-2xl font-semibold text-gray-200 text-center mb-6">
+            Biểu đồ nhiệt trạng thái máy
+          </h2>
+          <div className="relative h-[620px] w-full">
+            <ReactECharts
+              option={heatmapOption}
+              style={{ height: "100%", width: "100%" }}
+              notMerge={true}
+              lazyUpdate={true}
+            />
           </div>
         </div>
       </div>
-      <div className="flex-1 grid grid-cols-6 grid-rows-2 gap-3">
-        <div className="col-span-4">
-          <BieuDoNangLuongThangTruocThangNay
-            data={data_dashboard["chart_ss_dien"]}
-          />
-        </div>
-        <div className="col-span-2">
-          <BieuDoNangLuongHomNay data={data_dashboard["chart_dien"]} />
-        </div>
-        <div className="col-span-4">
-          <BieuDoNuocThangTruocThangNay
-            data={data_dashboard["chart_ss_nuoc"]}
-          />
-        </div>
-        <div className="col-span-2">
-          <BieuDoNuocHomNay data={data_dashboard["chart_nuoc"]} />
-        </div>
-      </div>
-    </div>
+    </main>
   );
 }
