@@ -3,7 +3,7 @@ import React, { useState, useMemo } from "react";
 import { useInterval } from "usehooks-ts";
 import Link from "next/link";
 import ReactECharts from "echarts-for-react";
-import { api_get_full_machines } from "../api";
+import { api_get_main_data } from "../api";
 
 type ErrorCode =
   | "e01"
@@ -18,18 +18,19 @@ type ErrorCode =
   | "e10"
   | "e11"
   | "e12"
-  | "e13"
-  | "e14";
+  | "e13";
 
 type MachineData = {
   id: number;
   status: boolean;
+  fps: number;
   so_met_dat: number;
   so_met_thuc: number;
   toc_do_dat: number;
   toc_do_thuc: number;
   hieu_suat: number;
-  ma_loi: ErrorCode;
+  ma_loi: ErrorCode | null;
+  regs: number[];
 };
 
 const errorCodes: Record<string, { message: string; color: string }> = {
@@ -46,7 +47,6 @@ const errorCodes: Record<string, { message: string; color: string }> = {
   e11: { message: "Báo động maoci", color: "#a855f7" },
   e12: { message: "Cửa mở", color: "#a855f7" },
   e13: { message: "Đang dừng khẩn cấp", color: "#a855f7" },
-  e14: { message: "Đạt chiều dài", color: "#a855f7" },
 };
 
 const statusTypes = [
@@ -75,10 +75,10 @@ export default function Overview() {
     runningMachines: 0,
     stoppedMachines: 0,
     offMachines: 0,
-    averageEfficiency: 0,
+    averageEfficiency: NaN,
     errorDistribution: {} as Record<string, number>,
-    highEfficiencyMachines: 0,
-    lowEfficiencyMachines: 0,
+    highEfficiencyMachines: NaN,
+    lowEfficiencyMachines: NaN,
     machinesByError: {} as Record<string, string[]>,
     totalActualMeters: 0,
     totalTargetMeters: 0,
@@ -89,8 +89,9 @@ export default function Overview() {
     }[],
   });
   const [cycle, setCycle] = useState<number | null>(100);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const mapErrorToStatusType = (errorCode: ErrorCode): number => {
+  const mapErrorToStatusType = (errorCode: ErrorCode | null): number => {
     if (!errorCode) return 8;
     switch (errorCode.toLowerCase()) {
       case "e01":
@@ -111,20 +112,183 @@ export default function Overview() {
     return status ? status.name : "Không xác định";
   };
 
+  const getErrorCode = (regs: number[]): ErrorCode | null => {
+    if (!regs || regs.length < 7) return null;
+
+    // Thanh ghi 0: Kiểm tra lỗi E03, E04
+    const reg0 = regs[0];
+    const reg0Binary = reg0.toString(2).padStart(16, "0");
+    const reg0Bits = reg0Binary.slice(-6); // Lấy 6 bit cuối (fedcba)
+    const errorE03 = reg0Bits[4] === "1" ? "e03" : null; // bit b
+    const errorE04 = reg0Bits[3] === "1" ? "e04" : null; // bit c
+
+    // Thanh ghi 6: Kiểm tra lỗi E01, E02, E05-E13
+    const reg6 = regs[6];
+    const reg6Binary = reg6.toString(2).padStart(16, "0");
+    const reg6Bits = reg6Binary.slice(-11); // Lấy 11 bit cuối (kji hgfe dcba)
+    const errors = [
+      reg6Bits[10] === "1" ? "e01" : null, // bit a
+      reg6Bits[9] === "1" ? "e02" : null, // bit b
+      reg6Bits[8] === "1" ? "e05" : null, // bit c
+      reg6Bits[7] === "1" ? "e06" : null, // bit d
+      reg6Bits[6] === "1" ? "e07" : null, // bit e
+      reg6Bits[5] === "1" ? "e08" : null, // bit f
+      reg6Bits[4] === "1" ? "e09" : null, // bit g
+      reg6Bits[3] === "1" ? "e10" : null, // bit h
+      reg6Bits[2] === "1" ? "e11" : null, // bit i
+      reg6Bits[1] === "1" ? "e12" : null, // bit j
+      reg6Bits[0] === "1" ? "e13" : null, // bit k
+    ].filter((e): e is ErrorCode => e !== null);
+
+    // Ưu tiên lỗi: E01 > E02 > E03 > E04 > E05 > ... > E13
+    const allErrors = [...errors, errorE03, errorE04].filter(
+      (e): e is ErrorCode => e !== null
+    );
+    if (allErrors.length === 0) return null;
+    const priorityErrors: ErrorCode[] = [
+      "e01",
+      "e02",
+      "e03",
+      "e04",
+      "e05",
+      "e06",
+      "e07",
+      "e08",
+      "e09",
+      "e10",
+      "e11",
+      "e12",
+      "e13",
+    ];
+    return allErrors.sort(
+      (a, b) => priorityErrors.indexOf(a) - priorityErrors.indexOf(b)
+    )[0];
+  };
+
   useInterval(async () => {
     setCycle(null);
+    setErrorMessage(null);
     try {
-      const res = await api_get_full_machines();
+      const res = await api_get_main_data();
       if (!res) {
-        console.log("Lỗi lấy dữ liệu từ API");
+        console.log("Lỗi: Không nhận được dữ liệu từ API");
+        setErrorMessage("Không nhận được dữ liệu từ API");
         setCycle(3000);
         return;
       }
 
-      console.log("Lấy data từ API: OK", res);
+      console.log("Dữ liệu thô từ API:", res);
       const data = res instanceof Response ? await res.json() : res;
+      console.log("Dữ liệu sau khi parse:", data);
+      console.log("Kiểu dữ liệu của data:", typeof data);
 
-      const machines: MachineData[] = data.machines;
+      // Kiểm tra và xử lý dữ liệu linh hoạt
+      let nodes: any[] = [];
+      if (Array.isArray(data)) {
+        nodes = data;
+      } else if (data && typeof data === "object") {
+        const possibleKeys = ["nodes", "data", "result", "machines"];
+        const foundKey = possibleKeys.find((key) => Array.isArray(data[key]));
+        if (foundKey) {
+          nodes = data[foundKey];
+        } else if (data.error) {
+          console.error("API trả về lỗi:", data.error);
+          setErrorMessage(`Lỗi từ API: ${data.error}`);
+          setCycle(3000);
+          return;
+        } else {
+          console.error("Dữ liệu không chứa mảng node:", data);
+          setErrorMessage("Dữ liệu API không đúng định dạng");
+          setCycle(3000);
+          return;
+        }
+      } else {
+        console.error("Dữ liệu không phải mảng hoặc object:", data);
+        setErrorMessage("Dữ liệu API không hợp lệ");
+        setCycle(3000);
+        return;
+      }
+
+      // Xử lý dữ liệu từ JSON
+      const machines: MachineData[] = [];
+      let totalDataCount = 0;
+
+      nodes.forEach((node: any, nodeIndex: number) => {
+        if (node.data_count && typeof node.data_count === "number") {
+          totalDataCount += node.data_count;
+        } else {
+          console.warn(
+            `Node ${nodeIndex} thiếu hoặc data_count không hợp lệ:`,
+            node.data_count
+          );
+        }
+
+        if (node.data && Array.isArray(node.data)) {
+          node.data.forEach((machine: any, machineIndex: number) => {
+            if (!machine.ip || !machine.regs) {
+              console.warn(
+                `Máy ${machineIndex} trong node ${nodeIndex} thiếu ip hoặc regs:`,
+                machine
+              );
+              return;
+            }
+
+            const ipParts = machine.ip.split(".");
+            const ipLastPart = parseInt(ipParts[3]);
+            if (ipLastPart < 11 || ipLastPart > 210) {
+              console.warn(
+                `IP không hợp lệ cho máy ${machine.ip}: ${ipLastPart}`
+              );
+              return;
+            }
+            const id = ipLastPart - 10; // 192.168.110.11 -> ID 1, 192.168.110.210 -> ID 200
+            const regs = Array.isArray(machine.regs) ? machine.regs : [];
+            const so_met_dat = regs[3] ? regs[3] / 10 : 0;
+            const so_met_thuc = regs[4] ? regs[4] / 10 : 0;
+            const toc_do_dat = regs[1] ? regs[1] / 10 : 0;
+            const toc_do_thuc = regs[2] ? regs[2] / 10 : 0;
+            const ma_loi = getErrorCode(regs);
+            const fps = typeof machine.fps === "number" ? machine.fps : 0;
+
+            machines.push({
+              id,
+              status: machine.connection || false,
+              fps,
+              so_met_dat,
+              so_met_thuc,
+              toc_do_dat,
+              toc_do_thuc,
+              hieu_suat: NaN,
+              ma_loi,
+              regs,
+            });
+
+            // Log debug cho máy con 1
+            if (id === 1) {
+              console.log(`Máy 1 (IP: ${machine.ip}):`, {
+                regs,
+                isRunning: regs[0]
+                  ? regs[0].toString(2).padStart(16, "0").slice(-6)[1] === "1"
+                  : false,
+                isStopped: regs[0]
+                  ? regs[0].toString(2).padStart(16, "0").slice(-6)[0] === "1"
+                  : false,
+                toc_do_thuc,
+                ma_loi,
+                status: machine.connection,
+                fps,
+              });
+            }
+          });
+        } else {
+          console.warn(
+            `Node ${nodeIndex} thiếu hoặc data không phải mảng:`,
+            node.data
+          );
+        }
+      });
+
+      // Tính toán các số liệu tổng hợp
       const errorDistribution: Record<string, number> = {};
       const machinesByError: Record<string, string[]> = {};
 
@@ -146,43 +310,141 @@ export default function Overview() {
       });
 
       const machineStatuses = machines.map((machine) => {
-        const statusType = machine.status
-          ? machine.toc_do_thuc > 0
-            ? 0
-            : 1
-          : 2;
-        return {
+        const reg0 = machine.regs[0] || 0;
+        const reg0Binary = reg0.toString(2).padStart(16, "0");
+        const reg0Bits = reg0Binary.slice(-6); // Lấy 6 bit cuối (fedcba)
+        const isRunning = reg0Bits[1] === "1"; // bit e: máy chạy
+        const ma_loi = machine.ma_loi;
+
+        let statusType: number;
+        if (ma_loi === "e01") {
+          statusType = 3; // Đứt sợi trên (ưu tiên 1)
+        } else if (ma_loi === "e02") {
+          statusType = 4; // Đứt sợi dưới (ưu tiên 1)
+        } else if (ma_loi === "e03") {
+          statusType = 5; // Đứt lõi cách điện (ưu tiên 2)
+        } else if (ma_loi === "e04") {
+          statusType = 6; // Đứt băng nhôm (ưu tiên 3)
+        } else if (
+          ma_loi &&
+          [
+            "e05",
+            "e06",
+            "e07",
+            "e08",
+            "e09",
+            "e10",
+            "e11",
+            "e12",
+            "e13",
+          ].includes(ma_loi)
+        ) {
+          statusType = 7; // Lỗi khác (ưu tiên 4)
+        } else if (!machine.status) {
+          statusType = 2; // Máy tắt (connection = false)
+        } else if (machine.status && machine.fps === 0) {
+          statusType = 1; // Máy dừng (connection = true, fps = 0)
+        } else if (
+          machine.status &&
+          machine.fps > 0 &&
+          isRunning &&
+          machine.toc_do_thuc > 0
+        ) {
+          statusType = 0; // Máy chạy
+        } else {
+          statusType = 2; // Máy tắt (mặc định)
+        }
+
+        const status = {
           id: `MÁY ${String(machine.id).padStart(2, "0")}`,
-          statusType: machine.ma_loi
-            ? mapErrorToStatusType(machine.ma_loi)
-            : statusType,
+          statusType,
           statusName: getStatusName(statusType),
         };
+
+        // Log trạng thái máy con 1
+        if (machine.id === 1) {
+          console.log(`Trạng thái MÁY 01:`, status);
+        }
+
+        return status;
       });
 
+      // Điền trạng thái cho các máy còn lại (nếu thiếu)
+      const allMachineStatuses = Array.from(
+        { length: totalMachines },
+        (_, i) => {
+          const machine = machines.find((m) => m.id === i + 1);
+          if (machine) {
+            return (
+              machineStatuses.find(
+                (s) => s.id === `MÁY ${String(machine.id).padStart(2, "0")}`
+              ) || {
+                id: `MÁY ${String(i + 1).padStart(2, "0")}`,
+                statusType: 2, // Máy tắt
+                statusName: "Máy tắt",
+              }
+            );
+          }
+          return {
+            id: `MÁY ${String(i + 1).padStart(2, "0")}`,
+            statusType: 2, // Máy tắt
+            statusName: "Máy tắt",
+          };
+        }
+      );
+
+      // Tính toán các số liệu tổng hợp
+      const totalMachinesCount = totalDataCount;
+      const runningMachines = machines.filter((m) => {
+        const reg0 = m.regs[0] || 0;
+        const reg0Binary = reg0.toString(2).padStart(16, "0");
+        const reg0Bits = reg0Binary.slice(-6);
+        return (
+          m.status &&
+          m.fps > 0 &&
+          reg0Bits[1] === "1" &&
+          m.toc_do_thuc > 0 &&
+          !m.ma_loi
+        );
+      }).length;
+      const stoppedMachines = machines.filter(
+        (m) => m.status && m.fps === 0 && !m.ma_loi
+      ).length;
+      const offMachines = machines.filter((m) => !m.status && !m.ma_loi).length;
+      const totalActualMeters = machines.reduce(
+        (sum, m) => sum + m.so_met_thuc,
+        0
+      );
+      const totalTargetMeters = machines.reduce(
+        (sum, m) => sum + m.so_met_dat,
+        0
+      );
+
       setSystemData({
-        totalMachines: data.tong_may,
-        runningMachines: data.may_dang_chay,
-        stoppedMachines: data.may_dang_dung,
-        offMachines: data.tong_may - data.may_dang_chay - data.may_dang_dung,
-        averageEfficiency: data.hieu_suat_trung_binh,
+        totalMachines: totalMachinesCount,
+        runningMachines,
+        stoppedMachines,
+        offMachines,
+        averageEfficiency: NaN,
         errorDistribution,
-        highEfficiencyMachines: data.hieu_suat_cao,
-        lowEfficiencyMachines: data.hieu_suat_thap,
+        highEfficiencyMachines: NaN,
+        lowEfficiencyMachines: NaN,
         machinesByError,
-        totalActualMeters: data.tong_so_met_thuc_te,
-        totalTargetMeters: data.tong_so_met_thuc_te + data.tong_so_met_con_lai,
-        machineStatuses,
+        totalActualMeters,
+        totalTargetMeters,
+        machineStatuses: allMachineStatuses,
       });
     } catch (error) {
-      console.error("Error fetching data:", error);
+      console.error("Lỗi khi lấy dữ liệu:", error);
+      setErrorMessage("Lỗi khi lấy dữ liệu từ API");
+      setCycle(3000);
     } finally {
       setCycle(1000);
     }
   }, cycle);
 
   const formatNumber = (num: number) =>
-    num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    isNaN(num) ? "NaN" : num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 
   const heatmapOption = useMemo(() => {
     const reversedMachineGroups = [...machineGroups].reverse();
@@ -221,7 +483,7 @@ export default function Overview() {
           const machineIndex = params.data[0];
           const machineId = reversedMachineGroups[groupIndex][machineIndex];
           const status = statusTypes.find((s) => s.value === params.data[2]);
-          return `${machineId}: ${status?.name || "Không xác định"}`;
+          return `Máy ${machineId}: ${status?.name || "Không xác định"}`;
         },
       },
       grid: {
@@ -253,8 +515,8 @@ export default function Overview() {
         top: "95%",
         pieces: [
           { min: 0, max: 0, label: "Máy chạy", color: "#34d399" },
-          { min: 1, max: 1, label: "Máy dừng", color: "#9ca3af" },
-          { min: 2, max: 2, label: "Máy tắt", color: "#3b82f6" },
+          { min: 1, max: 1, label: "Máy dừng", color: "#3b82f6" },
+          { min: 2, max: 2, label: "Máy tắt", color: "#9ca3af" },
           { min: 3, max: 3, label: "Đứt sợi trên", color: "#f87171" },
           { min: 4, max: 4, label: "Đứt sợi dưới", color: "#fbbf24" },
           { min: 5, max: 5, label: "Đứt lõi cách điện", color: "#60a5fa" },
@@ -293,6 +555,11 @@ export default function Overview() {
   return (
     <main className="min-h-screen bg-gray-900 text-white font-sans w-full">
       <div className="h-full w-full p-6">
+        {errorMessage ? (
+          <div className="bg-red-900/50 p-4 rounded-lg mb-6">
+            <p className="text-red-400">{errorMessage}</p>
+          </div>
+        ) : null}
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-4xl font-bold bg-gradient-to-r from-teal-400 to-indigo-500 text-transparent bg-clip-text">
             Dashboard ({totalMachines} máy)
@@ -306,7 +573,7 @@ export default function Overview() {
               className="w-5 h-5 ml-2"
               fill="none"
               stroke="currentColor"
-              viewBox="0 0 24 24"
+              viewBox="0 24 24"
             >
               <path
                 strokeLinecap="round"
@@ -399,7 +666,9 @@ export default function Overview() {
             </div>
             <div className="flex items-center mb-3">
               <span className="text-4xl font-bold text-green-400">
-                {systemData.averageEfficiency}%
+                {isNaN(systemData.averageEfficiency)
+                  ? "NaN"
+                  : `${Math.round(systemData.averageEfficiency)}%`}
               </span>
             </div>
             <div className="grid grid-cols-2 gap-2">
@@ -410,7 +679,9 @@ export default function Overview() {
                 <div className="flex items-center">
                   <div className="w-2 h-2 rounded-full bg-green-500 mr-1"></div>
                   <div className="text-base font-semibold text-green-400">
-                    {systemData.highEfficiencyMachines}
+                    {isNaN(systemData.highEfficiencyMachines)
+                      ? "NaN"
+                      : systemData.highEfficiencyMachines}
                   </div>
                 </div>
               </div>
@@ -421,7 +692,9 @@ export default function Overview() {
                 <div className="flex items-center">
                   <div className="w-2 h-2 rounded-full bg-red-500 mr-1"></div>
                   <div className="text-base font-semibold text-red-400">
-                    {systemData.lowEfficiencyMachines}
+                    {isNaN(systemData.lowEfficiencyMachines)
+                      ? "NaN"
+                      : systemData.lowEfficiencyMachines}
                   </div>
                 </div>
               </div>
@@ -512,11 +785,13 @@ export default function Overview() {
             </div>
             <div className="flex items-center mb-3">
               <span className="text-4xl font-bold text-purple-400">
-                {Math.round(
-                  (systemData.totalActualMeters /
-                    systemData.totalTargetMeters) *
-                    100
-                )}
+                {systemData.totalTargetMeters > 0
+                  ? Math.round(
+                      (systemData.totalActualMeters /
+                        systemData.totalTargetMeters) *
+                        100
+                    )
+                  : 0}
                 %
               </span>
             </div>
@@ -545,7 +820,7 @@ export default function Overview() {
 
         <div className="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700 w-full">
           <h2 className="text-2xl font-semibold text-gray-200 text-center mb-6">
-            Biểu đồ nhiệt trạng thái máy
+            BIỂU ĐỒ NHIỆT TRẠNG THÁI MÁY
           </h2>
           <div className="relative h-[620px] w-full">
             <ReactECharts

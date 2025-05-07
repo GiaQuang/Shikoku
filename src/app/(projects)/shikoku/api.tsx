@@ -4,7 +4,7 @@
 
 import { api_post_data } from "@/app/utils/utils";
 
-const API_PATH: string = `${process.env.NEXT_PUBLIC_FANCON_PATH}`;
+const API_PATH: string = `${process.env.NEXT_PUBLIC_SHIKOKU_IOT_PATH}`;
 
 /**
  * @return undefined or TYPE_CPU
@@ -205,4 +205,9 @@ export async function api_get_error_machines(timeout: number = 1000) {
   return res;
 }
 
+// !api get thông tin theo kiểu của Mr.Hoàng
+export async function api_get_main_data(timeout: number = 1000) {
+  let res = await api_post_data(`${API_PATH}/api_get_main_data`, {}, timeout);
+  return res;
+}
 // #endregion
