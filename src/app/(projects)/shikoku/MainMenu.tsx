@@ -81,20 +81,6 @@ export default function MyMenu({ set_is_show }: { set_is_show: Function }) {
       link: `/shikoku/trang_thai_ket_noi`,
       children: [],
     },
-    {
-      key: "cai_dat",
-      icon: <SettingOutlined style={{ fontSize: 24 }} />,
-      label: <div className="text-sm">{`Cài đặt`}</div>,
-      link: `/shikoku/cai_dat`,
-      children: [],
-    },
-    {
-      key: "lien_he",
-      icon: <MailOutlined style={{ fontSize: 24 }} />,
-      label: <div className="text-sm">{`Liên hệ`}</div>,
-      link: `/shikoku/lien_he`,
-      children: [],
-    },
   ];
 
   return (

@@ -66,7 +66,7 @@
 import PageTransitionEffect from "@/app/PageTransitionEffect";
 import NoSsr from "@/app/components/NoSsr";
 import MyMenu from "./MainMenu";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion as m } from "framer-motion";
 import { useSessionStorage } from "usehooks-ts";
 
@@ -75,6 +75,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     "key_show_menu",
     true
   );
+
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="fixed inset-0 bg-gradient-to-b from-[#323140] via-[#070522] to-[#383749] text-white font-bold select-none">
@@ -106,9 +115,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
 
           <footer className="flex h-8 shrink-0 border-t-4 border-[#383749] justify-between px-4 text-gray-400 text-sm items-center">
-            <div>data left</div>
-            <div>data center</div>
-            <div>data right</div>
+            <div>{currentTime.toLocaleTimeString()}</div>
+            {/* <div>data center</div> */}
+            <div>{currentTime.toLocaleDateString()}</div>
           </footer>
         </div>
       </div>

@@ -251,34 +251,142 @@
 //     </div>
 //   );
 // }
-
 "use client";
 import { useState } from "react";
+import { useInterval } from "usehooks-ts";
+import { api_get_main_data } from "../api";
 
-// Tạo dữ liệu mẫu
-const machines = Array.from({ length: 200 }, (_, i) => ({
-  name: `Máy ${i + 1}`,
-  ip: `192.168.1.${i + 1}`,
-  status: Math.random() > 0.5 ? "✅ Kết nối" : "❌ Mất kết nối",
-  lastSeen: new Date(Date.now() - Math.random() * 10000000000).toLocaleString(
-    "vi-VN"
-  ),
-}));
+// Constants for pagination
+const PAGE_SIZE = 12; // Number of machines per table
+const TABLES_PER_PAGE = 2; // Number of tables side by side
+const TOTAL_ITEMS_PER_PAGE = PAGE_SIZE * TABLES_PER_PAGE; // Total machines displayed
 
-const PAGE_SIZE = 12; // Số lượng máy hiển thị trên mỗi trang
-const TABLES_PER_PAGE = 2; // Số bảng hiển thị cạnh nhau
-const TOTAL_ITEMS_PER_PAGE = PAGE_SIZE * TABLES_PER_PAGE; // Tổng số máy hiển thị trên cả hai bảng
+// Process machine data from API
+const processMachineData = (apiData: any[]) => {
+  const machines: any[] = [];
+
+  apiData.forEach((node: any, nodeIndex: number) => {
+    if (!node.data || !Array.isArray(node.data)) {
+      console.warn(
+        `Node ${nodeIndex} thiếu hoặc data không phải mảng:`,
+        node.data
+      );
+      return;
+    }
+
+    node.data.forEach((machine: any, machineIndex: number) => {
+      if (
+        !machine.ip ||
+        machine.port === undefined ||
+        !machine.last_time_ok ||
+        machine.connection === undefined
+      ) {
+        console.warn(
+          `Máy ${machineIndex} trong node ${nodeIndex} thiếu ip, port, last_time_ok hoặc connection:`,
+          machine
+        );
+        return;
+      }
+
+      const ipParts = machine.ip.split(".");
+      const ipLastPart = parseInt(ipParts[3]);
+      if (ipLastPart < 11 || ipLastPart > 210) {
+        console.warn(`IP không hợp lệ cho máy ${machine.ip}: ${ipLastPart}`);
+        return;
+      }
+
+      const machineId = ipLastPart - 10; // 192.168.110.11 -> Máy 1, 192.168.110.210 -> Máy 200
+
+      machines.push({
+        name: `Máy ${machineId}`,
+        ip: machine.ip,
+        port: machine.port,
+        status: machine.connection ? "✅ Kết nối" : "❌ Mất kết nối",
+        lastSeen: new Date(machine.last_time_ok).toLocaleString("vi-VN"),
+        ipLastPart, // Store for sorting
+      });
+    });
+  });
+
+  // Sort machines by ipLastPart to ensure Máy 1 (192.168.110.11) to Máy 200 (192.168.110.210)
+  machines.sort((a, b) => a.ipLastPart - b.ipLastPart);
+
+  // Remove ipLastPart from final output
+  return machines.map(({ ipLastPart, ...rest }) => rest);
+};
 
 export default function MachineTable() {
+  const [machines, setMachines] = useState<any[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [cycle, setCycle] = useState<number | null>(1000);
 
-  // Lọc máy theo từ khóa tìm kiếm và trạng thái
+  // Fetch data from API
+  const fetchData = async () => {
+    setCycle(null);
+    setErrorMessage(null);
+    try {
+      const res = await api_get_main_data();
+      if (!res) {
+        console.log("Lỗi: Không nhận được dữ liệu từ API");
+        setErrorMessage("Không nhận được dữ liệu từ API");
+        setCycle(3000);
+        return;
+      }
+
+      const data = res instanceof Response ? await res.json() : res;
+
+      // Kiểm tra và xử lý dữ liệu
+      let nodes: any[] = [];
+      if (Array.isArray(data)) {
+        nodes = data;
+      } else if (data && typeof data === "object") {
+        const possibleKeys = ["nodes", "data", "result", "machines"];
+        const foundKey = possibleKeys.find((key) => Array.isArray(data[key]));
+        if (foundKey) {
+          nodes = data[foundKey];
+        } else if (data.error) {
+          console.error("API trả về lỗi:", data.error);
+          setErrorMessage(`Lỗi từ API: ${data.error}`);
+          setCycle(3000);
+          return;
+        } else {
+          console.error("Dữ liệu không chứa mảng node:", data);
+          setErrorMessage("Dữ liệu API không đúng định dạng");
+          setCycle(3000);
+          return;
+        }
+      } else {
+        console.error("Dữ liệu không phải mảng hoặc object:", data);
+        setErrorMessage("Dữ liệu API không hợp lệ");
+        setCycle(3000);
+        return;
+      }
+
+      const processedData = processMachineData(nodes);
+      setMachines(processedData);
+    } catch (error) {
+      console.error("Lỗi khi lấy dữ liệu:", error);
+      setErrorMessage("Lỗi khi lấy dữ liệu từ API");
+      setCycle(3000);
+    } finally {
+      setLoading(false);
+      setCycle(1000);
+    }
+  };
+
+  // Fetch data periodically
+  useInterval(fetchData, cycle);
+
+  // Filter machines
   const filteredMachines = machines.filter((machine) => {
     const matchesSearch =
       machine.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      machine.ip.includes(searchTerm);
+      machine.ip.includes(searchTerm) ||
+      machine.port.toString().includes(searchTerm);
 
     if (filterStatus === "all") return matchesSearch;
     if (filterStatus === "connected")
@@ -289,11 +397,9 @@ export default function MachineTable() {
     return matchesSearch;
   });
 
-  // Tính toán cho trang hiện tại
+  // Pagination
   const totalPages = Math.ceil(filteredMachines.length / TOTAL_ITEMS_PER_PAGE);
   const startIdx = (currentPage - 1) * TOTAL_ITEMS_PER_PAGE;
-
-  // Chia thiết bị thành hai bảng
   const currentMachinesLeft = filteredMachines.slice(
     startIdx,
     startIdx + PAGE_SIZE
@@ -303,7 +409,7 @@ export default function MachineTable() {
     startIdx + TOTAL_ITEMS_PER_PAGE
   );
 
-  // Thống kê nhanh
+  // Statistics
   const connectedCount = filteredMachines.filter((m) =>
     m.status.includes("Kết nối")
   ).length;
@@ -311,32 +417,35 @@ export default function MachineTable() {
     m.status.includes("Mất kết nối")
   ).length;
 
-  // Hàm reload dữ liệu
-  const handleReload = () => {
-    // Ở đây chỉ là hiệu ứng tải lại
+  // Reload data
+  const handleReload = async () => {
     setCurrentPage(1);
     setSearchTerm("");
     setFilterStatus("all");
-    // Trong ứng dụng thực tế, bạn sẽ gọi API để lấy dữ liệu mới
+    await fetchData();
   };
 
-  // Component cho một bảng thiết bị
+  // Single table component
   const SingleTable = ({ machines, startIndex }: any) => (
-    <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl shadow-2xl border border-slate-700 flex-grow flex flex-col overflow-hidden transition-all duration-300 ">
+    <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl shadow-2xl border border-slate-700 flex-grow flex flex-col overflow-hidden transition-all duration-300">
       <div className="overflow-auto flex-grow">
         <table className="min-w-full border-collapse">
           <thead className="bg-gradient-to-r from-blue-900/50 to-indigo-900/50 sticky top-0 z-10">
             <tr>
-              {["TÊN MÁY", "ĐỊA CHỈ IP", "CẬP NHẬT CUỐI", "TRẠNG THÁI"].map(
-                (header, index) => (
-                  <th
-                    key={index}
-                    className="px-4 py-3 text-left text-xl font-bold text-gray-200 uppercase tracking-wider border-b border-slate-700"
-                  >
-                    {header}
-                  </th>
-                )
-              )}
+              {[
+                "TÊN MÁY",
+                "ĐỊA CHỈ IP",
+                "PORT",
+                "TRẠNG THÁI",
+                "CẬP NHẬT CUỐI",
+              ].map((header, index) => (
+                <th
+                  key={index}
+                  className="px-4 py-3 text-left text-xl font-bold text-gray-200 uppercase tracking-wider border-b border-slate-700"
+                >
+                  {header}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-700">
@@ -352,7 +461,7 @@ export default function MachineTable() {
                   {machine.ip}
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap text-xl text-gray-300 group-hover:text-white">
-                  {machine.lastSeen}
+                  {machine.port}
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap">
                   <span
@@ -365,12 +474,14 @@ export default function MachineTable() {
                     {machine.status}
                   </span>
                 </td>
+                <td className="px-4 py-3 whitespace-nowrap text-xl text-gray-300 group-hover:text-white">
+                  {machine.lastSeen}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-
       {machines.length === 0 && (
         <div className="text-center py-6 flex-grow">
           <p className="text-gray-400 text-base animate-pulse">
@@ -383,12 +494,19 @@ export default function MachineTable() {
 
   return (
     <div className="w-full h-screen flex flex-col bg-gradient-to-br from-slate-900 to-slate-800 text-gray-100 overflow-hidden">
-      <div className="p-4 md:p-6 flex-grow flex flex-col overflow-hidden">
+      <div className="p-4 md:p-5 flex-grow flex flex-col overflow-hidden">
         <h2 className="text-3xl md:text-4xl font-bold mb-4 text-transparent text-center bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-500">
-          Trạng thái kết nối
+          TRẠNG THÁI KẾT NỐI
         </h2>
 
-        {/* Thống kê với icons */}
+        {/* Error message */}
+        {errorMessage && (
+          <div className="bg-red-900/50 p-4 rounded-lg mb-6">
+            <p className="text-red-400">{errorMessage}</p>
+          </div>
+        )}
+
+        {/* Statistics */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           {[
             {
@@ -473,14 +591,14 @@ export default function MachineTable() {
           ))}
         </div>
 
-        {/* Công cụ tìm kiếm và lọc */}
+        {/* Search and filter */}
         <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl shadow-xl border border-slate-700 mb-4 p-4">
           <div className="flex flex-col md:flex-row gap-4">
             <div className="flex-grow">
               <input
                 type="text"
-                placeholder="Tìm kiếm theo tên máy hoặc IP..."
-                className="w-full p-3 border rounded-xl bg-slate-700 border-slate-600 text-white text-base placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-300"
+                placeholder="Tìm kiếm theo tên máy, IP hoặc port..."
+                className="w-full p-3 border rounded-xl bg-slate-700 border-slate-600 text-white text-base placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-300"
                 value={searchTerm}
                 onChange={(e) => {
                   setSearchTerm(e.target.value);
@@ -508,7 +626,7 @@ export default function MachineTable() {
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  className="h-6 w-6 text-blue-400"
+                  className="h-6 w-6 text-blue-400 transform transition-transform duration-500 ease-in-out hover:rotate-180"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -525,90 +643,106 @@ export default function MachineTable() {
           </div>
         </div>
 
-        {/* Container cho hai bảng */}
-        <div className="flex flex-col md:flex-row gap-4 flex-grow overflow-hidden">
-          {/* Bảng bên trái */}
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <SingleTable machines={currentMachinesLeft} startIndex={startIdx} />
+        {/* Loading state */}
+        {loading ? (
+          <div className="text-center py-6 flex-grow">
+            <p className="text-gray-400 text-base animate-pulse">
+              Đang tải dữ liệu...
+            </p>
           </div>
-
-          {/* Bảng bên phải */}
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <SingleTable
-              machines={currentMachinesRight}
-              startIndex={startIdx + PAGE_SIZE}
-            />
-          </div>
-        </div>
-
-        {/* Phân trang */}
-        <div className="bg-gradient-to-r from-slate-800 to-slate-900 px-4 py-3 flex items-center justify-between border-t border-slate-700 mt-4 rounded-b-2xl shadow-xl">
-          <div className="flex-1 flex justify-between items-center">
-            <div>
-              <p className="text-sm text-gray-300">
-                Hiển thị <span className="font-medium">{startIdx + 1}</span> đến{" "}
-                <span className="font-medium">
-                  {Math.min(
-                    startIdx + TOTAL_ITEMS_PER_PAGE,
-                    filteredMachines.length
-                  )}
-                </span>{" "}
-                trong tổng số{" "}
-                <span className="font-medium">{filteredMachines.length}</span>{" "}
-                thiết bị
-              </p>
+        ) : (
+          <>
+            {/* Tables container */}
+            <div className="flex flex-col md:flex-row gap-4 flex-grow overflow-hidden">
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <SingleTable
+                  machines={currentMachinesLeft}
+                  startIndex={startIdx}
+                />
+              </div>
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <SingleTable
+                  machines={currentMachinesRight}
+                  startIndex={startIdx + PAGE_SIZE}
+                />
+              </div>
             </div>
-            <div>
-              <nav
-                className="relative z-0 inline-flex rounded-xl shadow-sm -space-x-px"
-                aria-label="Pagination"
-              >
-                {[
-                  {
-                    label: "⏮ Đầu",
-                    action: () => setCurrentPage(1),
-                    disabled: currentPage === 1,
-                  },
-                  {
-                    label: "⬅ Trước",
-                    action: () => setCurrentPage((prev) => prev - 1),
-                    disabled: currentPage === 1,
-                  },
-                  {
-                    label: `Trang ${currentPage} / ${totalPages || 1}`,
-                    action: () => {},
-                    disabled: true,
-                  },
-                  {
-                    label: "Sau ➡",
-                    action: () => setCurrentPage((prev) => prev + 1),
-                    disabled: currentPage === totalPages || totalPages === 0,
-                  },
-                  {
-                    label: "Cuối ⏭",
-                    action: () => setCurrentPage(totalPages),
-                    disabled: currentPage === totalPages || totalPages === 0,
-                  },
-                ].map((btn, index) => (
-                  <button
-                    key={index}
-                    className={`relative inline-flex items-center px-3 py-2 border border-slate-600 bg-slate-800 text-base font-medium text-gray-300 hover:bg-slate-700 disabled:opacity-50 transition-all duration-300 ${
-                      index === 0
-                        ? "rounded-l-xl"
-                        : index === 4
-                        ? "rounded-r-xl"
-                        : ""
-                    }`}
-                    disabled={btn.disabled}
-                    onClick={btn.action}
+
+            {/* Pagination */}
+            <div className="bg-gradient-to-r from-slate-800 to-slate-900 px-4 py-3 flex items-center justify-between border-t border-slate-700 mt-4 rounded-b-2xl shadow-xl">
+              <div className="flex-1 flex justify-between items-center">
+                <div>
+                  <p className="text-sm text-gray-300">
+                    Hiển thị <span className="font-medium">{startIdx + 1}</span>{" "}
+                    đến{" "}
+                    <span className="font-medium">
+                      {Math.min(
+                        startIdx + TOTAL_ITEMS_PER_PAGE,
+                        filteredMachines.length
+                      )}
+                    </span>{" "}
+                    trong tổng số{" "}
+                    <span className="font-medium">
+                      {filteredMachines.length}
+                    </span>{" "}
+                    thiết bị
+                  </p>
+                </div>
+                <div>
+                  <nav
+                    className="relative z-0 inline-flex rounded-xl shadow-sm -space-x-px"
+                    aria-label="Pagination"
                   >
-                    {btn.label}
-                  </button>
-                ))}
-              </nav>
+                    {[
+                      {
+                        label: "⏮ Đầu",
+                        action: () => setCurrentPage(1),
+                        disabled: currentPage === 1,
+                      },
+                      {
+                        label: "⬅ Trước",
+                        action: () => setCurrentPage((prev) => prev - 1),
+                        disabled: currentPage === 1,
+                      },
+                      {
+                        label: `Trang ${currentPage} / ${totalPages || 1}`,
+                        action: () => {},
+                        // disabled: true,
+                      },
+                      {
+                        label: "Sau ➡",
+                        action: () => setCurrentPage((prev) => prev + 1),
+                        disabled:
+                          currentPage === totalPages || totalPages === 0,
+                      },
+                      {
+                        label: "Cuối ⏭",
+                        action: () => setCurrentPage(totalPages),
+                        disabled:
+                          currentPage === totalPages || totalPages === 0,
+                      },
+                    ].map((btn, index) => (
+                      <button
+                        key={index}
+                        className={`relative inline-flex items-center px-3 py-2 border border-slate-600 bg-slate-800 text-base font-medium text-gray-300 hover:bg-slate-700 disabled:opacity-50 transition-all duration-300 ${
+                          index === 0
+                            ? "rounded-l-xl"
+                            : index === 4
+                            ? "rounded-r-xl"
+                            : ""
+                        }`}
+                        disabled={btn.disabled}
+                        onClick={btn.action}
+                      >
+                        {btn.label}
+                      </button>
+                    ))}
+                  </nav>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          </>
+        )}
       </div>
     </div>
   );

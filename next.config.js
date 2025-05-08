@@ -4,16 +4,15 @@
  */
 
 const nextConfig = {
-    output: "export",
     images: { unoptimized: true },
-    reactStrictMode: false, // Bật React.StrictMode, tạm bật để test
-    typescript: {
-        // !! WARN !!
-        // Dangerously allow production builds to successfully complete even if
-        // your project has type errors.
-        // !! WARN !!
-        ignoreBuildErrors: true,
+    reactStrictMode: false, // Tắt StrictMode
+    eslint: { ignoreDuringBuilds: true },
+    typescript: { ignoreBuildErrors: true },
+    experimental: {
+        optimizePackageImports: ["@mantine/core", "@mantine/hooks"],
     },
+    productionBrowserSourceMaps: false,
+    trailingSlash: false,
 };
 
 module.exports = nextConfig;

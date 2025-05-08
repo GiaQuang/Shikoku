@@ -1,0 +1,9 @@
+node_modules
+build
+out
+.next
+.git
+.gitignore
+Dockerfile
+next-env.d.ts
+*.tar
